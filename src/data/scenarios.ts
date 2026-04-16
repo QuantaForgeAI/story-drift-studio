@@ -1,12 +1,18 @@
+import type { TopologyNodeType } from "@/lib/topologyNodes";
+import { SCENARIO_SCHEMA_VERSION } from "@/lib/scenarioConstants";
+
 export type Severity = "critical" | "high" | "medium" | "low" | "info";
+export const severityValues = ["critical", "high", "medium", "low", "info"] as const;
+export const topologyNodeStatusValues = ["healthy", "degraded", "down", "unknown"] as const;
+export const timelineEventTypeValues = ["drift", "alert", "failure", "recovery", "injection", "cascade"] as const;
 
 export interface TopologyNode {
   id: string;
   label: string;
-  type: "service" | "database" | "gateway" | "queue" | "cache" | "external";
+  type: TopologyNodeType;
   x: number;
   y: number;
-  status: "healthy" | "degraded" | "down" | "unknown";
+  status: (typeof topologyNodeStatusValues)[number];
 }
 
 export interface TopologyEdge {
@@ -18,7 +24,7 @@ export interface TopologyEdge {
 export interface TimelineEvent {
   id: string;
   timestamp: number; // seconds into the incident
-  type: "drift" | "alert" | "failure" | "recovery" | "injection" | "cascade";
+  type: (typeof timelineEventTypeValues)[number];
   severity: Severity;
   title: string;
   description: string;
@@ -35,6 +41,7 @@ export interface IncidentNarrative {
 }
 
 export interface Scenario {
+  schemaVersion: number;
   id: string;
   name: string;
   subtitle: string;
@@ -48,6 +55,7 @@ export interface Scenario {
 
 export const scenarios: Scenario[] = [
   {
+    schemaVersion: SCENARIO_SCHEMA_VERSION,
     id: "supply-chain-attack",
     name: "Supply Chain Compromise",
     subtitle: "Malicious dependency injection via CI/CD pipeline drift",
@@ -101,6 +109,7 @@ export const scenarios: Scenario[] = [
     },
   },
   {
+    schemaVersion: SCENARIO_SCHEMA_VERSION,
     id: "k8s-drift-cascade",
     name: "Kubernetes Config Cascade",
     subtitle: "Resource limit removal triggers OOM cascade across cluster",
@@ -146,6 +155,7 @@ export const scenarios: Scenario[] = [
     },
   },
   {
+    schemaVersion: SCENARIO_SCHEMA_VERSION,
     id: "iam-privilege-escalation",
     name: "IAM Privilege Escalation",
     subtitle: "Stale IAM policy drift enables unauthorized admin access",

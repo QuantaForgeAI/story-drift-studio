@@ -1,0 +1,1 @@
+export const SCENARIO_SCHEMA_VERSION = 1;
