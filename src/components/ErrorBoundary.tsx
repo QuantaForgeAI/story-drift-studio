@@ -1,12 +1,16 @@
 import React from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import type { ScenarioSystemLogCategory } from "@/lib/scenarioBackendModels";
+import { reportSystemError } from "@/lib/scenarioObservability";
 
 interface Props {
   children: React.ReactNode;
   title?: string;
   description?: string;
   resetKeys?: unknown[];
+  logCategory?: ScenarioSystemLogCategory;
+  logEvent?: string;
 }
 
 interface State {
@@ -21,6 +25,16 @@ export class ErrorBoundary extends React.Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    reportSystemError({
+      category: this.props.logCategory ?? "render",
+      event: this.props.logEvent ?? "react.error_boundary",
+      message: this.props.title ?? "Error boundary captured an exception",
+      details: {
+        description: this.props.description ?? null,
+        componentStack: errorInfo.componentStack,
+      },
+      error,
+    });
     console.error("Error boundary captured an exception", error, errorInfo);
   }
 

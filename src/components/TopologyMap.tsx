@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import type { TopologyNode, TopologyEdge } from "@/data/scenarios";
 import { TopologyNodeIcon } from "@/components/TopologyNodeIcon";
+import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 
 interface Props {
   nodes: TopologyNode[];
@@ -28,6 +29,17 @@ export const TopologyMap: React.FC<Props> = ({ nodes, edges, nodeStates, affecte
   const nodeMap = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
   const svgRef = React.useRef<SVGSVGElement>(null);
   const [dragging, setDragging] = React.useState<string | null>(null);
+  const [focusedNodeId, setFocusedNodeId] = React.useState<string | null>(null);
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const titleId = "system-topology-title";
+  const summaryId = "system-topology-summary";
+  const instructionsId = "system-topology-instructions";
+  const criticalPulse = prefersReducedMotion
+    ? { duration: "4s", opacity: "0.2;0.36;0.2" }
+    : { duration: "2s", radius: "28;36;28", opacity: "0.5;0.2;0.5" };
+  const degradedPulse = prefersReducedMotion
+    ? { duration: "5s", opacity: "0.16;0.28;0.16" }
+    : { duration: "3s", radius: "26;32;26", opacity: "0.4;0.15;0.4" };
 
   // Convert screen coordinates to SVG coordinates
   const screenToSvg = React.useCallback((clientX: number, clientY: number): { x: number; y: number } | null => {
@@ -79,6 +91,27 @@ export const TopologyMap: React.FC<Props> = ({ nodes, edges, nodeStates, affecte
     setDragging(null);
   }, []);
 
+  const handleKeyboardMove = React.useCallback(
+    (event: React.KeyboardEvent<SVGGElement>, node: TopologyNode) => {
+      if (!onNodePositionChange) return;
+
+      const step = event.shiftKey ? 24 : 8;
+      const movementByKey: Partial<Record<string, { x: number; y: number }>> = {
+        ArrowUp: { x: 0, y: -step },
+        ArrowDown: { x: 0, y: step },
+        ArrowLeft: { x: -step, y: 0 },
+        ArrowRight: { x: step, y: 0 },
+      };
+      const movement = movementByKey[event.key];
+
+      if (!movement) return;
+
+      event.preventDefault();
+      onNodePositionChange(node.id, node.x + movement.x, node.y + movement.y);
+    },
+    [onNodePositionChange],
+  );
+
   // Global move/end listeners
   React.useEffect(() => {
     if (dragging) {
@@ -107,12 +140,34 @@ export const TopologyMap: React.FC<Props> = ({ nodes, edges, nodeStates, affecte
   }, [edges, nodeStates]);
 
   return (
-    <div className="glass-panel p-4 h-full flex flex-col">
+    <section
+      className="glass-panel flex h-full flex-col p-4"
+      aria-labelledby={titleId}
+      aria-describedby={`${summaryId} ${instructionsId}`}
+    >
       <div className="flex items-center gap-2 mb-3">
         <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-        <h3 className="font-heading text-xs uppercase tracking-widest text-muted-foreground">System Topology</h3>
+        <h3 id={titleId} className="font-heading text-xs uppercase tracking-widest text-muted-foreground">
+          System Topology
+        </h3>
       </div>
-      <svg ref={svgRef} viewBox="0 0 800 400" className="flex-1 w-full" preserveAspectRatio="xMidYMid meet">
+      <p id={summaryId} className="sr-only">
+        Topology view with {nodes.length} nodes and {edges.length} connections. {affectedNodes.length} nodes are currently affected.
+      </p>
+      <p id={instructionsId} className="sr-only">
+        {onNodePositionChange
+          ? "Use Tab to focus a node. Use the arrow keys to move the focused node, or hold Shift with the arrow keys to move it faster."
+          : "Use Tab to focus a node and hear its current status and connections."}
+      </p>
+      <svg
+        ref={svgRef}
+        viewBox="0 0 800 400"
+        className="flex-1 w-full"
+        preserveAspectRatio="xMidYMid meet"
+        role="img"
+        aria-labelledby={titleId}
+        aria-describedby={`${summaryId} ${instructionsId}`}
+      >
         <defs>
           <filter id="glow">
             <feGaussianBlur stdDeviation="3" result="blur" />
@@ -186,13 +241,13 @@ export const TopologyMap: React.FC<Props> = ({ nodes, edges, nodeStates, affecte
                 strokeDasharray={isAffected ? "6 3" : undefined}
                 filter={isAffected ? "url(#glow)" : undefined}
               >
-                {isAffected && (
+                {isAffected && !prefersReducedMotion && (
                   <animate attributeName="stroke-dashoffset" from="0" to="-18" dur="1s" repeatCount="indefinite" />
                 )}
               </line>
 
               {/* Propagation particles - multiple particles per affected edge */}
-              {isAffected && (
+              {isAffected && !prefersReducedMotion && (
                 <>
                   {[0, 1, 2].map((pi) => (
                     <circle key={pi} r="4" fill="url(#particle-critical)" filter="url(#particle-glow)">
@@ -217,7 +272,7 @@ export const TopologyMap: React.FC<Props> = ({ nodes, edges, nodeStates, affecte
                   </line>
                 </>
               )}
-              {isDegraded && !isAffected && (
+              {isDegraded && !isAffected && !prefersReducedMotion && (
                 <>
                   {[0, 1].map((pi) => (
                     <circle key={pi} r="3" fill="url(#particle-degraded)" filter="url(#particle-glow)">
@@ -238,21 +293,58 @@ export const TopologyMap: React.FC<Props> = ({ nodes, edges, nodeStates, affecte
         {nodes.map((node) => {
           const status = nodeStates.get(node.id) ?? node.status;
           const isAffected = affectedNodes.includes(node.id);
+          const connectedEdges = edges.filter(
+            (edge) => edge.from === node.id || edge.to === node.id,
+          ).length;
+          const isKeyboardFocusable = dragging == null || dragging === node.id;
+
           return (
-            <g key={node.id} style={{ cursor: onNodePositionChange ? "grab" : undefined }}>
+            <g
+              key={node.id}
+              style={{ cursor: onNodePositionChange ? "grab" : undefined }}
+              tabIndex={isKeyboardFocusable ? 0 : -1}
+              focusable="true"
+              role={onNodePositionChange ? "button" : "img"}
+              aria-label={
+                onNodePositionChange
+                  ? `${node.label}, ${status} status, ${connectedEdges} connections. Use arrow keys to reposition this node.`
+                  : `${node.label}, ${status} status, ${connectedEdges} connections.`
+              }
+              aria-keyshortcuts={onNodePositionChange ? "ArrowUp ArrowDown ArrowLeft ArrowRight" : undefined}
+              onKeyDown={(event) => handleKeyboardMove(event, node)}
+              onFocus={() => setFocusedNodeId(node.id)}
+              onBlur={() =>
+                setFocusedNodeId((currentFocusedNodeId) =>
+                  currentFocusedNodeId === node.id ? null : currentFocusedNodeId,
+                )
+              }
+            >
               {/* Pulse ring for affected */}
               {(status === "down" || isAffected) && (
                 <circle cx={node.x} cy={node.y} r={32} className="fill-none stroke-severity-critical/30" strokeWidth={2} filter="url(#glow-critical)">
-                  <animate attributeName="r" values="28;36;28" dur="2s" repeatCount="indefinite" />
-                  <animate attributeName="opacity" values="0.5;0.2;0.5" dur="2s" repeatCount="indefinite" />
+                  {criticalPulse.radius ? (
+                    <animate attributeName="r" values={criticalPulse.radius} dur={criticalPulse.duration} repeatCount="indefinite" />
+                  ) : null}
+                  <animate attributeName="opacity" values={criticalPulse.opacity} dur={criticalPulse.duration} repeatCount="indefinite" />
                 </circle>
               )}
               {status === "degraded" && (
                 <circle cx={node.x} cy={node.y} r={30} className="fill-none stroke-severity-medium/30" strokeWidth={1.5}>
-                  <animate attributeName="r" values="26;32;26" dur="3s" repeatCount="indefinite" />
-                  <animate attributeName="opacity" values="0.4;0.15;0.4" dur="3s" repeatCount="indefinite" />
+                  {degradedPulse.radius ? (
+                    <animate attributeName="r" values={degradedPulse.radius} dur={degradedPulse.duration} repeatCount="indefinite" />
+                  ) : null}
+                  <animate attributeName="opacity" values={degradedPulse.opacity} dur={degradedPulse.duration} repeatCount="indefinite" />
                 </circle>
               )}
+              {focusedNodeId === node.id ? (
+                <circle
+                  cx={node.x}
+                  cy={node.y}
+                  r={29}
+                  className="fill-none stroke-primary"
+                  strokeWidth={2}
+                />
+              ) : null}
 
               {/* Main circle with drag events */}
               <circle
@@ -300,6 +392,6 @@ export const TopologyMap: React.FC<Props> = ({ nodes, edges, nodeStates, affecte
           );
         })}
       </svg>
-    </div>
+    </section>
   );
 };

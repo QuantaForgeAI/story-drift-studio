@@ -1,10 +1,21 @@
 import { useLocation } from "react-router-dom";
 import { useEffect } from "react";
+import { recordSystemLog } from "@/lib/scenarioObservability";
 
 const NotFound = () => {
   const location = useLocation();
 
   useEffect(() => {
+    recordSystemLog({
+      level: "warn",
+      category: "navigation",
+      event: "route.not_found",
+      message: `User attempted to access a missing route: ${location.pathname}`,
+      route: location.pathname,
+      details: {
+        pathname: location.pathname,
+      },
+    });
     console.error("404 Error: User attempted to access non-existent route:", location.pathname);
   }, [location.pathname]);
 

@@ -2,345 +2,252 @@
 
 ## Overview
 
-The System Drift Simulator allows you to create and manage custom incident scenarios. This guide walks you through building scenarios from scratch or by modifying exported templates.
+This guide is aligned with the current project model in `src/data/scenarios.ts` and the scenario builder used by the app.
 
-## Quick Start
+System Drift Simulator stores custom incident scenarios as JSON objects with a strict schema. Scenarios are made of topology nodes, edges, timeline events, and a narrative. The app plays them back as a live incident simulation with event-driven node state changes and progressive narrative reveals.
 
-### Option 1: Build Via UI (Recommended)
+## Best Way to Create a Scenario
 
-1. Click **"Build Custom Scenario"** in the sidebar
-2. Follow the 5-step wizard:
-   - **Scenario**: Define metadata (name, description, severity, duration)
-   - **Nodes**: Add system components (services, databases, gateways, etc.)
-   - **Edges**: Define connections between nodes
-   - **Events**: Create timeline of incident events
-   - **Review**: Verify and save your scenario
+### Option 1: Build in the App
 
-### Option 2: Import JSON File
+- Use the scenario builder to add nodes, draw edges, and define incident events.
+- The UI persists the scenario into the active workspace once saved.
+- You can replay the simulation immediately, inspect node state changes, and watch the narrative unlock as the incident progresses.
 
-1. Click **"Import"** in the header
-2. Select a `.json` file with your scenario
-3. The scenario is automatically loaded and available for use
+### Option 2: Import JSON
 
-### Option 3: Export & Modify
+- Import a scenario JSON file through the app’s import flow.
+- The imported JSON must match the project schema, including `schemaVersion`, `nodes`, `edges`, `events`, and `narrative`.
+- Example assets are available in `examples/imports/` and the public `scenario-template.json`.
 
-1. Select any existing scenario
-2. Click **"Export"** to download as JSON
-3. Edit the JSON file locally
-4. Click **"Import"** to load your modified version
+### Option 3: Export and Edit
 
-## Scenario Structure (JSON Format)
+- Export an existing scenario from the app.
+- Edit the exported JSON locally.
+- Re-import the updated file to apply changes.
 
-```json
-{
-  "id": "my-scenario-001",
-  "name": "Database Migration Failure",
-  "subtitle": "Schema migration causes cascading failures",
-  "severity": "critical",
-  "duration": 300,
-  "nodes": [...],
-  "edges": [...],
-  "events": [...],
-  "narrative": {...}
-}
-```
+## Scenario Schema
 
-### Key Fields
+A scenario must include these top-level fields:
+- `schemaVersion` — the scenario schema version
+- `id` — unique scenario identifier
+- `name` — display title
+- `subtitle` — short description
+- `severity` — one of `critical`, `high`, `medium`, `low`, `info`
+- `duration` — total incident length in seconds
+- `nodes` — topology nodes
+- `edges` — node relationships
+- `events` — timeline events
+- `narrative` — incident story
 
-- **id** (string): Unique identifier. Use format: `custom-{name}-{timestamp}`
-- **name** (string): Display name (1-50 characters)
-- **subtitle** (string): Brief description of the scenario
-- **severity** (string): One of: `critical`, `high`, `medium`, `low`, `info`
-- **duration** (number): Total incident duration in seconds
-- **nodes** (array): System topology components
-- **edges** (array): Connections between nodes
-- **events** (array): Timeline of incident events
-- **narrative** (object): Human-readable incident story
-
-## Nodes (System Components)
-
-Nodes represent system components in your topology.
-
-### Node Structure
+### Minimal example
 
 ```json
 {
-  "id": "api-gateway-01",
-  "label": "API Gateway",
-  "type": "gateway",
-  "x": 400,
-  "y": 60,
-  "status": "healthy"
-}
-```
-
-### Node Types
-
-The builder supports a broader node catalog so you can model platform, security, data, and edge-heavy scenarios more realistically.
-
-- **Clients & Edge**: `client`, `mobile`, `dns`, `gateway`, `load-balancer`
-- **Compute & Apps**: `service`, `compute`, `serverless`, `worker`, `ai`
-- **Data & Messaging**: `database`, `storage`, `cache`, `queue`, `stream`
-- **Control & Ops**: `identity`, `observability`, `security`, `ci-cd`
-- **Integrations**: `external`
-
-Use the **Node Type** picker in the Scenario Builder for the full grouped catalog, or the **Quick Add** chips for the most common system components.
-
-### Positioning
-
-- **x, y**: Coordinates in SVG viewport (0-800 horizontally, 0-400 vertically)
-- Use a layout tool or manually space nodes logically
-- Nodes can be dragged in the UI to reposition
-
-### Status
-
-The initial `status` field is overridden by events. Valid values:
-- `healthy`: Normal operation
-- `degraded`: Performance issues, partial failures
-- `down`: Complete outage
-- `unknown`: Unknown state
-
-## Edges (Connections)
-
-Edges represent data flow or dependencies between nodes.
-
-### Edge Structure
-
-```json
-{
-  "from": "api-gateway-01",
-  "to": "api-service-01",
-  "animated": true
-}
-```
-
-### Properties
-
-- **from** (string): Source node ID
-- **to** (string): Target node ID
-- **animated** (boolean, optional): Show propagation particles on edge
-
-### Guidelines
-
-- Create edges from entry points (gateway) toward internal services
-- Connect services to their dependencies (services → databases)
-- Use multiple edges to show complex interactions
-- Minimum 1 edge required for a valid scenario
-
-## Events (Incident Timeline)
-
-Events are the incidents that occur during the scenario. They define what happens and when.
-
-### Event Structure
-
-```json
-{
-  "id": "evt-database-lock",
-  "timestamp": 45,
-  "type": "failure",
-  "severity": "critical",
-  "title": "Database Lock Escalation",
-  "description": "Long-running transaction causing lock escalation and deadlocks",
-  "affectedNodes": ["database-primary", "database-replica"],
-  "stateDiff": [
-    {
-      "field": "lock_count",
-      "before": "10",
-      "after": "1000"
-    }
-  ]
-}
-```
-
-### Event Types
-
-| Type | Meaning |
-|------|---------|
-| `drift` | Performance or behavior change |
-| `alert` | Warning condition detected |
-| `failure` | Component failure or outage |
-| `recovery` | Component recovers from failure |
-| `injection` | Intentional test or chaos injection |
-| `cascade` | Failure cascades to other components |
-
-### Event Severity
-
-Same as scenario severity: `critical`, `high`, `medium`, `low`, `info`
-
-### Guidelines
-
-- **timestamp**: In seconds, relative to scenario start (0 = start)
-- **affectedNodes**: Array of node IDs impacted by this event
-- **stateDiff**: Optional detailed state changes (metadata)
-- Events should be in chronological order
-
-### Example Event Sequence
-
-```json
-[
-  { "timestamp": 10, "type": "alert", "severity": "medium", "title": "High CPU Usage", "affectedNodes": ["service-1"] },
-  { "timestamp": 30, "type": "failure", "severity": "critical", "title": "OOM Kill", "affectedNodes": ["service-1"] },
-  { "timestamp": 32, "type": "cascade", "severity": "critical", "title": "Downstream Requests Timeout", "affectedNodes": ["service-2"] },
-  { "timestamp": 120, "type": "recovery", "severity": "info", "title": "Service Restart Complete", "affectedNodes": ["service-1"] }
-]
-```
-
-## Narrative (Incident Story)
-
-The narrative provides human-readable explanations revealed progressively during playback.
-
-### Narrative Structure
-
-```json
-{
-  "executiveSummary": "High-level business impact summary",
-  "technicalSummary": "Technical details of the failure",
-  "rootCause": "Primary cause of the incident",
-  "actions": ["Action 1", "Action 2", "Action 3"],
-  "impactScore": 85
-}
-```
-
-### Properties
-
-- **executiveSummary**: 1-2 sentences, focus on impact
-- **technicalSummary**: Detailed technical explanation
-- **rootCause**: Single sentence identifying primary cause
-- **actions**: Array of remediation or preventive actions
-- **impactScore**: Number 0-100 representing severity impact
-
-### Progressive Reveal
-
-The narrative sections are revealed based on playback progress:
-- 0% → Executive Summary (always visible)
-- 30% → Technical Summary
-- 50% → Root Cause
-- 70% → Actions
-
-## Complete Example
-
-```json
-{
-  "id": "custom-cache-failure-001",
-  "name": "Cache Layer Cascade Failure",
-  "subtitle": "Redis cache failure cascades to database overload",
+  "schemaVersion": 1,
+  "id": "custom-incident-001",
+  "name": "Unauthorized Access Simulation",
+  "subtitle": "Simulated auth compromise and containment",
   "severity": "high",
-  "duration": 180,
-  "nodes": [
-    { "id": "gateway", "label": "API Gateway", "type": "gateway", "x": 400, "y": 60, "status": "healthy" },
-    { "id": "api", "label": "API Service", "type": "service", "x": 400, "y": 160, "status": "healthy" },
-    { "id": "cache", "label": "Redis Cache", "type": "cache", "x": 250, "y": 280, "status": "healthy" },
-    { "id": "db", "label": "PostgreSQL", "type": "database", "x": 550, "y": 280, "status": "healthy" }
-  ],
-  "edges": [
-    { "from": "gateway", "to": "api", "animated": true },
-    { "from": "api", "to": "cache", "animated": true },
-    { "from": "api", "to": "db", "animated": true },
-    { "from": "cache", "to": "db", "animated": false }
-  ],
-  "events": [
-    {
-      "id": "evt-memory",
-      "timestamp": 15,
-      "type": "alert",
-      "severity": "medium",
-      "title": "High Memory Usage",
-      "description": "Redis memory usage above 80%",
-      "affectedNodes": ["cache"]
-    },
-    {
-      "id": "evt-cache-fail",
-      "timestamp": 45,
-      "type": "failure",
-      "severity": "high",
-      "title": "Cache Connection Pool Exhausted",
-      "description": "Connection timeouts to Redis",
-      "affectedNodes": ["cache"]
-    },
-    {
-      "id": "evt-cascade",
-      "timestamp": 50,
-      "type": "cascade",
-      "severity": "high",
-      "title": "Database Connection Surge",
-      "description": "Cache bypass causes 10x database queries",
-      "affectedNodes": ["db"]
-    },
-    {
-      "id": "evt-recovery",
-      "timestamp": 140,
-      "type": "recovery",
-      "severity": "info",
-      "title": "Cache Restarted",
-      "description": "Redis service recovered",
-      "affectedNodes": ["cache"]
-    }
-  ],
+  "duration": 120,
+  "nodes": [],
+  "edges": [],
+  "events": [],
   "narrative": {
-    "executiveSummary": "Redis cache failure caused database overload, leading to 90% increase in API latency for 95 seconds.",
-    "technicalSummary": "Memory leak in Redis client caused connection pool exhaustion. Without cache, API requests bypassed to database, causing 10x increase in database load and connection saturation.",
-    "rootCause": "Memory leak in connection pool client library not releasing connections on timeout",
-    "actions": [
-      "Upgrade Redis client library to patched version",
-      "Implement connection pool monitoring and alerts",
-      "Add circuit breaker pattern for cache failures",
-      "Load test to verify connection pool limits"
-    ],
-    "impactScore": 72
+    "executiveSummary": "...",
+    "technicalSummary": "...",
+    "rootCause": "...",
+    "actions": ["..."],
+    "impactScore": 75
   }
 }
 ```
 
-## Tips & Best Practices
+## Topology Nodes
 
-### Topology Design
+Nodes define the system components in the topology.
 
-1. **Layout**: Position components logically (top to bottom: external → gateway → services → data)
-2. **Connections**: Connect related components; avoid overcrowding
-3. **Variety**: Mix different node types to create realistic systems
+### Node fields
 
-### Event Design
+- `id` — unique node identifier
+- `label` — how the node appears in the UI
+- `type` — one of the supported topology node types
+- `x`, `y` — position coordinates for the topology layout
+- `status` — initial node status
 
-1. **Realistic**: Model real-world failure modes
-2. **Progressive**: Build up from alerts to cascading failures
-3. **Recovery**: Include recovery events to show resilience
-4. **Timing**: Space events realistically (not too fast or slow)
+### Supported node types
 
-### Duration
+The app supports these node types:
 
-- Short scenarios: 60-120 seconds (simple failures)
-- Medium scenarios: 120-300 seconds (cascading failures)
-- Long scenarios: 300+ seconds (slow-burn issues with recovery)
+- Clients & Edge: `client`, `mobile`, `dns`, `gateway`, `load-balancer`
+- Compute & Apps: `service`, `compute`, `serverless`, `worker`, `ai`
+- Data & Messaging: `database`, `storage`, `cache`, `queue`, `stream`
+- Control & Ops: `identity`, `observability`, `security`, `ci-cd`
+- Integrations: `external`
 
-### Testing Your Scenario
+### Status values
 
-1. **Import** your JSON file
-2. **Play** the timeline to verify event sequence
-3. **Check** that affected nodes highlight correctly
-4. **Verify** narrative reveals at correct times
-5. **Adjust** timings or descriptions as needed
+- `healthy`
+- `degraded`
+- `down`
+- `unknown`
+
+> The timeline engine updates node state dynamically as events trigger. The initial `status` is the starting state before the first event.
+
+## Edges
+
+Edges represent relationships and data flow between nodes.
+
+### Edge fields
+
+- `from` — source node id
+- `to` — target node id
+- `animated` — optional boolean for edge animation
+
+### Practical guidance
+
+- Connect services to their downstream dependencies.
+- Link ingress/gateway nodes to the services they reach.
+- Use simple, directional flows rather than overlapping line spaghetti.
+
+## Timeline Events
+
+Events are the core of the incident simulation.
+
+### Event fields
+
+- `id` — unique event identifier
+- `timestamp` — seconds into the scenario
+- `type` — one of the supported event types
+- `severity` — impact level
+- `title` — brief event title
+- `description` — event details
+- `affectedNodes` — list of affected node ids
+- `stateDiff` — optional array of state change details
+
+### Supported event types
+
+- `drift` — config or behavior drift
+- `alert` — a warning or monitoring signal
+- `failure` — component failure or outage
+- `recovery` — remediation or recovery action
+- `injection` — intentional test or threat injection
+- `cascade` — failure propagation to dependent components
+
+### Severity values
+
+- `critical`
+- `high`
+- `medium`
+- `low`
+- `info`
+
+### Important behavior
+
+- `timestamp` is measured in seconds from scenario start.
+- Events should be sorted chronologically.
+- `affectedNodes` must match the node ids defined in `nodes`.
+- `stateDiff` is optional and is used for additional incident context.
+
+## Incident Narrative
+
+The app renders the narrative progressively as the scenario plays.
+
+### Narrative fields
+
+- `executiveSummary` — top-level impact summary
+- `technicalSummary` — detailed technical analysis
+- `rootCause` — primary failure cause
+- `actions` — recommended remediation actions
+- `impactScore` — number between 0 and 100
+
+### Reveal thresholds
+
+- 0% progress: Executive Summary is visible
+- >30% progress: Technical Summary is revealed
+- >50% progress: Root Cause is revealed
+- >70% progress: Recommended Actions are revealed
+
+## Real example from the app
+
+Here is a real scenario structure modeled on the current project data:
+
+```json
+{
+  "schemaVersion": 1,
+  "id": "supply-chain-attack",
+  "name": "Supply Chain Compromise",
+  "subtitle": "Malicious dependency injection via CI/CD pipeline drift",
+  "severity": "critical",
+  "duration": 180,
+  "nodes": [
+    { "id": "gateway", "label": "API Gateway", "type": "gateway", "x": 400, "y": 60, "status": "healthy" },
+    { "id": "auth", "label": "Auth Service", "type": "service", "x": 200, "y": 180, "status": "healthy" },
+    { "id": "api", "label": "Core API", "type": "service", "x": 400, "y": 180, "status": "healthy" },
+    { "id": "worker", "label": "Worker Pool", "type": "service", "x": 600, "y": 180, "status": "healthy" },
+    { "id": "db", "label": "PostgreSQL", "type": "database", "x": 300, "y": 320, "status": "healthy" },
+    { "id": "cache", "label": "Redis Cache", "type": "cache", "x": 500, "y": 320, "status": "healthy" },
+    { "id": "queue", "label": "Message Queue", "type": "queue", "x": 600, "y": 320, "status": "healthy" },
+    { "id": "cdn", "label": "CDN / Static", "type": "external", "x": 100, "y": 60, "status": "healthy" }
+  ],
+  "edges": [
+    { "from": "gateway", "to": "auth" },
+    { "from": "gateway", "to": "api" },
+    { "from": "api", "to": "db" },
+    { "from": "api", "to": "cache" },
+    { "from": "api", "to": "worker" },
+    { "from": "worker", "to": "queue" },
+    { "from": "worker", "to": "db" },
+    { "from": "cdn", "to": "gateway" },
+    { "from": "auth", "to": "db" }
+  ],
+  "events": [
+    { "id": "e1", "timestamp": 0, "type": "drift", "severity": "info", "title": "CI/CD pipeline config drift detected", "description": "Build pipeline YAML modified — new npm registry mirror added to dependency resolution chain.", "affectedNodes": ["api"], "stateDiff": [{ "field": "npm_registry", "before": "registry.npmjs.org", "after": "npm-mirror.internal.io" }] },
+    { "id": "e2", "timestamp": 15, "type": "drift", "severity": "medium", "title": "Dependency checksum mismatch", "description": "Package `event-stream@4.0.1` integrity hash differs from baseline lockfile.", "affectedNodes": ["api"], "stateDiff": [{ "field": "event-stream.sha512", "before": "a3f8c1...baseline", "after": "7d2e9b...modified" }] },
+    { "id": "e3", "timestamp": 35, "type": "injection", "severity": "high", "title": "Malicious payload deployed", "description": "Modified dependency includes obfuscated exfiltration code targeting environment variables.", "affectedNodes": ["api", "worker"] },
+    { "id": "e4", "timestamp": 55, "type": "alert", "severity": "high", "title": "Anomalous outbound connections", "description": "Core API initiating HTTPS connections to unknown external IP 45.33.x.x on port 8443.", "affectedNodes": ["api"] },
+    { "id": "e5", "timestamp": 75, "type": "cascade", "severity": "critical", "title": "Database credentials exfiltrated", "description": "Environment variable DB_PASSWORD observed in outbound payload.", "affectedNodes": ["api", "db"] },
+    { "id": "e6", "timestamp": 95, "type": "failure", "severity": "critical", "title": "Unauthorized database access", "description": "Foreign IP authenticated to PostgreSQL using exfiltrated credentials.", "affectedNodes": ["db"] },
+    { "id": "e7", "timestamp": 120, "type": "alert", "severity": "critical", "title": "Data exfiltration in progress", "description": "Bulk SELECT queries and chunked HTTPS uploads detected.", "affectedNodes": ["db", "api"] },
+    { "id": "e8", "timestamp": 145, "type": "recovery", "severity": "high", "title": "Emergency credential rotation", "description": "All database passwords rotated. Foreign IP blocked.", "affectedNodes": ["db", "api", "auth"] },
+    { "id": "e9", "timestamp": 165, "type": "recovery", "severity": "medium", "title": "Pipeline lockdown & audit", "description": "CI/CD pipeline reverted to signed baseline.", "affectedNodes": ["api", "worker"] },
+    { "id": "e10", "timestamp": 180, "type": "recovery", "severity": "low", "title": "Incident contained", "description": "All services restored to known-good baseline.", "affectedNodes": [] }
+  ],
+  "narrative": {
+    "executiveSummary": "A supply chain attack compromised the CI/CD pipeline and exfiltrated database credentials.",
+    "technicalSummary": "Unsigned pipeline configuration allowed a dependency substitution that deployed credential-harvesting code from a malicious npm mirror.",
+    "rootCause": "CI/CD config drift and missing dependency integrity verification.",
+    "actions": [
+      "Enforce cryptographic signing for pipeline configuration",
+      "Enable dependency hash verification",
+      "Block unauthorized outbound egress",
+      "Rotate credentials and audit access logs"
+    ],
+    "impactScore": 92
+  }
+}
+```
 
 ## Troubleshooting
 
-### Import Fails
+### Import errors
 
-- Ensure JSON is valid (use a JSON validator)
-- Check all required fields are present
-- Verify node IDs in edges/events match defined nodes
-- Timestamp values must be within 0-duration range
+- Ensure the JSON is valid and includes `schemaVersion`.
+- Verify that `nodes`, `edges`, `events`, and `narrative` all exist.
+- Confirm every node referenced in `edges` and `affectedNodes` is defined.
+- Timestamps must be within the scenario duration.
 
-### Nodes Don't Highlight
+### Scenario validation
 
-- Verify node IDs in `affectedNodes` match node `id` exactly
-- Check event timestamps are within scenario duration
-- Ensure events have correct `type` for desired highlighting
+- Node IDs must be unique.
+- Event IDs must be unique.
+- Event timestamps should be sorted and within range.
+- `severity` must use the allowed values.
+- `type` must be one of the row event types.
 
-### Events Not Appearing
+## Notes
 
-- Verify timestamps are in seconds, not milliseconds
-- Check events are sorted by timestamp
-- Ensure events array is not empty
-
-## Support
-
-For issues or questions, check the example scenarios in the app or consult the UI builder for field hints.
+- The app does not accept custom fields outside this schema.
+- `public/scenario-template.json` is a sample asset and can be used as a starting point.
+- The builder is intentionally oriented around incident playback, not arbitrary graph editing.
+- The narrative unlocks as the scenario progresses, so a good story is tied directly to the timeline.

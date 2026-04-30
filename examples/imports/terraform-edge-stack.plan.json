@@ -1,0 +1,65 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.9.5",
+  "configuration": {
+    "root_module": {
+      "resources": [
+        {
+          "address": "aws_lb.public",
+          "mode": "managed",
+          "type": "aws_lb",
+          "name": "public"
+        },
+        {
+          "address": "aws_cloudfront_distribution.edge",
+          "mode": "managed",
+          "type": "aws_cloudfront_distribution",
+          "name": "edge",
+          "depends_on": [
+            "aws_lb.public"
+          ]
+        },
+        {
+          "address": "aws_lambda_function.checkout_api",
+          "mode": "managed",
+          "type": "aws_lambda_function",
+          "name": "checkout_api",
+          "depends_on": [
+            "aws_cloudfront_distribution.edge"
+          ]
+        },
+        {
+          "address": "aws_db_instance.checkout",
+          "mode": "managed",
+          "type": "aws_db_instance",
+          "name": "checkout",
+          "depends_on": [
+            "aws_lambda_function.checkout_api"
+          ]
+        }
+      ]
+    }
+  },
+  "resource_changes": [
+    {
+      "address": "aws_cloudfront_distribution.edge",
+      "type": "aws_cloudfront_distribution",
+      "name": "edge",
+      "change": {
+        "actions": [
+          "update"
+        ]
+      }
+    },
+    {
+      "address": "aws_lambda_function.checkout_api",
+      "type": "aws_lambda_function",
+      "name": "checkout_api",
+      "change": {
+        "actions": [
+          "update"
+        ]
+      }
+    }
+  ]
+}

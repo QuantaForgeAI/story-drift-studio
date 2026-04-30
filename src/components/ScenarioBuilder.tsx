@@ -48,6 +48,7 @@ const steps: { key: Step; label: string }[] = [
 
 export const ScenarioBuilder: React.FC<Props> = ({ onSave, onClose }) => {
   const [step, setStep] = useState<Step>("meta");
+  const builderId = React.useId();
 
   // Meta
   const [name, setName] = useState("");
@@ -185,25 +186,28 @@ export const ScenarioBuilder: React.FC<Props> = ({ onSave, onClose }) => {
   const nextNodeDefinition = getTopologyNodeDefinition(newNodeType);
 
   return (
-    <div className="glass-panel p-5 h-full flex flex-col overflow-hidden">
+    <section className="glass-panel flex h-full flex-col overflow-hidden p-5" aria-labelledby={`${builderId}-title`}>
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Zap className="h-4 w-4 text-primary" />
-          <h2 className="font-heading text-sm uppercase tracking-widest text-foreground">Scenario Builder</h2>
+          <h2 id={`${builderId}-title`} className="font-heading text-sm uppercase tracking-widest text-foreground">Scenario Builder</h2>
         </div>
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClose}>
+        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onClose} aria-label="Close scenario builder">
           <X className="h-4 w-4" />
         </Button>
       </div>
 
       {/* Step indicators */}
-      <div className="flex items-center gap-1 mb-4">
+      <nav className="mb-4 flex items-center gap-1" aria-label="Scenario builder steps">
         {steps.map((s, i) => (
           <button
             key={s.key}
+            type="button"
             onClick={() => setStep(s.key)}
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-mono uppercase tracking-wider transition-all ${
+            aria-current={s.key === step ? "step" : undefined}
+            aria-label={`${i + 1} ${s.label}`}
+            className={`focus-ring flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider transition-all ${
               s.key === step
                 ? "bg-primary/20 text-primary border border-primary/30"
                 : i <= stepIdx
@@ -215,33 +219,33 @@ export const ScenarioBuilder: React.FC<Props> = ({ onSave, onClose }) => {
             <span className="hidden sm:inline">{s.label}</span>
           </button>
         ))}
-      </div>
+      </nav>
 
       {/* Step content */}
       <div className="flex-1 overflow-y-auto scrollbar-thin min-h-0 space-y-3">
         {step === "meta" && (
           <>
             <div>
-              <label className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Scenario Name *</label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. DNS Cache Poisoning" className="bg-secondary/50 border-border/50 text-sm h-8" />
+              <label htmlFor={`${builderId}-scenario-name`} className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Scenario Name *</label>
+              <Input id={`${builderId}-scenario-name`} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. DNS Cache Poisoning" className="bg-secondary/50 border-border/50 text-sm h-8" />
             </div>
             <div>
-              <label className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Subtitle</label>
-              <Input value={subtitle} onChange={(e) => setSubtitle(e.target.value)} placeholder="Brief description of the incident" className="bg-secondary/50 border-border/50 text-sm h-8" />
+              <label htmlFor={`${builderId}-scenario-subtitle`} className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Subtitle</label>
+              <Input id={`${builderId}-scenario-subtitle`} value={subtitle} onChange={(e) => setSubtitle(e.target.value)} placeholder="Brief description of the incident" className="bg-secondary/50 border-border/50 text-sm h-8" />
             </div>
             <div className="flex gap-3">
               <div className="flex-1">
                 <label className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Severity</label>
                 <Select value={severity} onValueChange={(v) => setSeverity(v as Severity)}>
-                  <SelectTrigger className="bg-secondary/50 border-border/50 h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="bg-secondary/50 border-border/50 h-8 text-xs" aria-label="Scenario severity"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {severities.map((s) => <SelectItem key={s} value={s} className="text-xs">{s.toUpperCase()}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div className="flex-1">
-                <label className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Duration (seconds)</label>
-                <Input type="number" value={duration} onChange={(e) => setDuration(Number(e.target.value))} className="bg-secondary/50 border-border/50 text-sm h-8" min={30} max={600} />
+                <label htmlFor={`${builderId}-scenario-duration`} className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider mb-1 block">Duration (seconds)</label>
+                <Input id={`${builderId}-scenario-duration`} type="number" value={duration} onChange={(e) => setDuration(Number(e.target.value))} className="bg-secondary/50 border-border/50 text-sm h-8" min={30} max={600} />
               </div>
             </div>
           </>
@@ -260,7 +264,7 @@ export const ScenarioBuilder: React.FC<Props> = ({ onSave, onClose }) => {
                 <div className="space-y-1">
                   <label className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider block">Node Type</label>
                   <Select value={newNodeType} onValueChange={(v) => setNewNodeType(v as TopologyNode["type"])}>
-                    <SelectTrigger className="bg-secondary/50 border-border/50 h-8 text-xs">
+                    <SelectTrigger className="bg-secondary/50 border-border/50 h-8 text-xs" aria-label="New node type">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="max-h-80">
@@ -297,12 +301,12 @@ export const ScenarioBuilder: React.FC<Props> = ({ onSave, onClose }) => {
                       <button
                         key={type}
                         type="button"
-                        title={definition.description}
+                        aria-label={`Quick add ${definition.label}. ${definition.description}`}
                         onClick={() => {
                           setNewNodeType(type);
                           addNode(type);
                         }}
-                        className={`flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10px] font-mono transition-all ${
+                        className={`focus-ring flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10px] font-mono transition-all ${
                           newNodeType === type
                             ? "border-primary/40 bg-primary/15 text-foreground"
                             : "border-border/50 bg-secondary/40 text-muted-foreground hover:border-border hover:text-foreground"
@@ -329,13 +333,14 @@ export const ScenarioBuilder: React.FC<Props> = ({ onSave, onClose }) => {
                     </span>
                   </span>
                   <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-severity-critical" onClick={() => removeNode(i)}>
+                    <span className="sr-only">Remove node {node.label || i + 1}</span>
                     <Trash2 className="h-3 w-3" />
                   </Button>
                 </div>
                 <div className="flex flex-col gap-2 sm:flex-row">
-                  <Input value={node.label} onChange={(e) => updateNode(i, { label: e.target.value })} placeholder="Label" className="bg-secondary/50 border-border/50 text-xs h-7 flex-1" />
+                  <Input aria-label={`Label for node ${i + 1}`} value={node.label} onChange={(e) => updateNode(i, { label: e.target.value })} placeholder="Label" className="bg-secondary/50 border-border/50 text-xs h-7 flex-1" />
                   <Select value={node.type} onValueChange={(v) => updateNodeType(i, v as TopologyNode["type"])}>
-                    <SelectTrigger className="bg-secondary/50 border-border/50 h-7 text-xs w-full sm:w-44"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="bg-secondary/50 border-border/50 h-7 text-xs w-full sm:w-44" aria-label={`Type for node ${node.label || i + 1}`}><SelectValue /></SelectTrigger>
                     <SelectContent className="max-h-80">
                       {topologyNodeTypeGroups.map((group) => (
                         <SelectGroup key={group.label}>
@@ -377,19 +382,19 @@ export const ScenarioBuilder: React.FC<Props> = ({ onSave, onClose }) => {
             {edges.map((edge, i) => (
               <div key={i} className="glass-panel-elevated p-3 flex items-center gap-2">
                 <Select value={edge.from} onValueChange={(v) => updateEdge(i, { from: v })}>
-                  <SelectTrigger className="bg-secondary/50 border-border/50 h-7 text-xs flex-1"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="bg-secondary/50 border-border/50 h-7 text-xs flex-1" aria-label={`Origin node for connection ${i + 1}`}><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {nodes.map((n) => <SelectItem key={n.id} value={n.id} className="text-xs">{n.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
                 <span className="text-muted-foreground text-xs">→</span>
                 <Select value={edge.to} onValueChange={(v) => updateEdge(i, { to: v })}>
-                  <SelectTrigger className="bg-secondary/50 border-border/50 h-7 text-xs flex-1"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="bg-secondary/50 border-border/50 h-7 text-xs flex-1" aria-label={`Destination node for connection ${i + 1}`}><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {nodes.map((n) => <SelectItem key={n.id} value={n.id} className="text-xs">{n.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-severity-critical" onClick={() => removeEdge(i)}>
+                <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-severity-critical" onClick={() => removeEdge(i)} aria-label={`Remove connection ${i + 1}`}>
                   <Trash2 className="h-3 w-3" />
                 </Button>
               </div>
@@ -416,38 +421,42 @@ export const ScenarioBuilder: React.FC<Props> = ({ onSave, onClose }) => {
                       type="number"
                       value={evt.timestamp}
                       onChange={(e) => updateEvent(i, { timestamp: Number(e.target.value) })}
+                      aria-label={`Timestamp for event ${i + 1}`}
                       className="bg-secondary/50 border-border/50 text-xs h-7 w-16"
                       min={0}
                       max={duration}
                       placeholder="t"
                     />
                     <Select value={evt.type} onValueChange={(v) => updateEvent(i, { type: v as TimelineEvent["type"] })}>
-                      <SelectTrigger className="bg-secondary/50 border-border/50 h-7 text-xs w-24"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="bg-secondary/50 border-border/50 h-7 text-xs w-24" aria-label={`Type for event ${i + 1}`}><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {eventTypes.map((t) => <SelectItem key={t} value={t} className="text-xs">{t.toUpperCase()}</SelectItem>)}
                       </SelectContent>
                     </Select>
                     <Select value={evt.severity} onValueChange={(v) => updateEvent(i, { severity: v as Severity })}>
-                      <SelectTrigger className="bg-secondary/50 border-border/50 h-7 text-xs w-24"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="bg-secondary/50 border-border/50 h-7 text-xs w-24" aria-label={`Severity for event ${i + 1}`}><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {severities.map((s) => <SelectItem key={s} value={s} className="text-xs">{s.toUpperCase()}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
-                  <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-severity-critical" onClick={() => removeEvent(i)}>
+                  <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-severity-critical" onClick={() => removeEvent(i)} aria-label={`Remove event ${i + 1}`}>
                     <Trash2 className="h-3 w-3" />
                   </Button>
                 </div>
-                <Input value={evt.title} onChange={(e) => updateEvent(i, { title: e.target.value })} placeholder="Event title" className="bg-secondary/50 border-border/50 text-xs h-7" />
-                <Textarea value={evt.description} onChange={(e) => updateEvent(i, { description: e.target.value })} placeholder="Description" className="bg-secondary/50 border-border/50 text-xs min-h-[50px] resize-none" />
+                <Input aria-label={`Title for event ${i + 1}`} value={evt.title} onChange={(e) => updateEvent(i, { title: e.target.value })} placeholder="Event title" className="bg-secondary/50 border-border/50 text-xs h-7" />
+                <Textarea aria-label={`Description for event ${i + 1}`} value={evt.description} onChange={(e) => updateEvent(i, { description: e.target.value })} placeholder="Description" className="bg-secondary/50 border-border/50 text-xs min-h-[50px] resize-none" />
                 <div>
                   <span className="font-mono text-[9px] text-muted-foreground uppercase mb-1 block">Affected Nodes</span>
                   <div className="flex flex-wrap gap-1">
                     {nodes.map((n) => (
                       <button
                         key={n.id}
+                        type="button"
                         onClick={() => toggleEventNode(i, n.id)}
-                        className={`px-2 py-0.5 rounded text-[10px] font-mono transition-all ${
+                        aria-pressed={evt.affectedNodes.includes(n.id)}
+                        aria-label={`${evt.affectedNodes.includes(n.id) ? "Remove" : "Add"} affected node ${n.label} for event ${i + 1}`}
+                        className={`focus-ring px-2 py-0.5 rounded text-[10px] font-mono transition-all ${
                           evt.affectedNodes.includes(n.id)
                             ? "bg-primary/20 text-primary border border-primary/40"
                             : "bg-secondary/50 text-muted-foreground border border-transparent hover:border-border"
@@ -489,7 +498,7 @@ export const ScenarioBuilder: React.FC<Props> = ({ onSave, onClose }) => {
             {/* Mini topology preview */}
             <div className="glass-panel-elevated p-3">
               <span className="font-mono text-[9px] text-muted-foreground uppercase mb-2 block">Topology Preview</span>
-              <svg viewBox="0 0 800 400" className="w-full h-32">
+              <svg viewBox="0 0 800 400" className="w-full h-32" role="img" aria-label={`Topology preview with ${nodes.length} nodes and ${edges.length} connections`}>
                 {edges.map((edge, i) => {
                   const from = nodes.find((n) => n.id === edge.from);
                   const to = nodes.find((n) => n.id === edge.to);
@@ -509,7 +518,7 @@ export const ScenarioBuilder: React.FC<Props> = ({ onSave, onClose }) => {
             {/* Event timeline preview */}
             <div className="glass-panel-elevated p-3">
               <span className="font-mono text-[9px] text-muted-foreground uppercase mb-2 block">Event Timeline</span>
-              <div className="relative h-3 bg-secondary/50 rounded-full">
+              <div className="relative h-3 bg-secondary/50 rounded-full" aria-hidden="true">
                 {events.map((evt, i) => (
                   <div
                     key={i}
@@ -520,10 +529,16 @@ export const ScenarioBuilder: React.FC<Props> = ({ onSave, onClose }) => {
                       "bg-severity-low"
                     }`}
                     style={{ left: `${(evt.timestamp / duration) * 100}%` }}
-                    title={evt.title}
                   />
                 ))}
               </div>
+              <ul className="sr-only">
+                {events.map((evt) => (
+                  <li key={evt.id}>
+                    {evt.title || "Untitled event"} at {evt.timestamp} seconds with {evt.severity} severity.
+                  </li>
+                ))}
+              </ul>
             </div>
           </div>
         )}
@@ -555,6 +570,6 @@ export const ScenarioBuilder: React.FC<Props> = ({ onSave, onClose }) => {
           </Button>
         )}
       </div>
-    </div>
+    </section>
   );
 };

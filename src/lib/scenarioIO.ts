@@ -1,59 +1,87 @@
 import type { Scenario } from "@/data/scenarios";
 import { SCENARIO_SCHEMA_VERSION } from "@/lib/scenarioConstants";
 import {
+  importScenarioArtifactFromText,
+  type ScenarioImportResult,
+} from "@/lib/scenarioImportPipelines";
+import {
   formatScenarioValidationError,
   parseScenario,
 } from "@/lib/scenarioSchema";
 
-/**
- * Export a scenario as a JSON file
- */
-export const exportScenario = (scenario: Scenario) => {
-  const exportedScenario = parseScenario({
-    ...scenario,
-    schemaVersion: SCENARIO_SCHEMA_VERSION,
-  });
-  const json = JSON.stringify(exportedScenario, null, 2);
-  const blob = new Blob([json], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `scenario-${scenario.id}-${Date.now()}.json`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-};
+const MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024;
 
-/**
- * Import a scenario from a JSON file
- */
-export const importScenario = (file: File): Promise<Scenario> => {
+function readFileAsText(file: File): Promise<string> {
+  if (typeof file.text === "function") {
+    return file.text();
+  }
+
   return new Promise((resolve, reject) => {
-    if (file.size > 1024 * 1024) {
-      reject(new Error("Scenario file exceeds the 1 MB import limit."));
-      return;
-    }
-
     const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const json = e.target?.result as string;
-        const scenario = parseScenario(JSON.parse(json));
-
-        resolve({
-          ...scenario,
-          id: `imported-${Date.now()}`,
-        });
-      } catch (err) {
-        reject(new Error(`Failed to import scenario: ${formatScenarioValidationError(err)}`));
-      }
+    reader.onload = () => {
+      resolve(typeof reader.result === "string" ? reader.result : "");
     };
     reader.onerror = () => {
       reject(new Error("Failed to read file"));
     };
     reader.readAsText(file);
   });
+}
+
+function downloadFile(
+  content: BlobPart,
+  fileName: string,
+  contentType: string,
+) {
+  const blob = new Blob([content], { type: contentType });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Export a scenario as a JSON file
+ */
+export const exportScenario = (scenario: Scenario, fileName?: string) => {
+  const exportedScenario = parseScenario({
+    ...scenario,
+    schemaVersion: SCENARIO_SCHEMA_VERSION,
+  });
+  const json = JSON.stringify(exportedScenario, null, 2);
+  downloadFile(
+    json,
+    fileName ?? `scenario-${scenario.id}-${Date.now()}.json`,
+    "application/json",
+  );
+};
+
+export const downloadTextExport = (fileName: string, content: string) => {
+  downloadFile(content, fileName, "text/markdown;charset=utf-8");
+};
+
+/**
+ * Import a scenario artifact from JSON or YAML.
+ */
+export const importScenario = async (file: File): Promise<ScenarioImportResult> => {
+  if (file.size > MAX_IMPORT_FILE_BYTES) {
+    throw new Error("Import file exceeds the 5 MB upload limit.");
+  }
+
+  try {
+    const text = await readFileAsText(file);
+    return await importScenarioArtifactFromText(text, {
+      fileName: file.name,
+    });
+  } catch (error) {
+    throw new Error(
+      `Failed to import artifact: ${formatScenarioValidationError(error)}`,
+    );
+  }
 };
 
 /**

@@ -1,0 +1,60 @@
+{
+  "incident": {
+    "title": "Payments Database Failover Loop",
+    "summary": "Checkout degraded after a database failover introduced replication lag and repeated leader swaps.",
+    "rootCause": "Failover automation promoted an unhealthy replica during sustained write traffic.",
+    "actions": [
+      "Add failover health gates before promotion",
+      "Block promotion when replication lag exceeds the SLO",
+      "Add runbook steps for controlled traffic reduction before database failover"
+    ]
+  },
+  "services": [
+    {
+      "name": "checkout-api",
+      "type": "api",
+      "dependencies": [
+        "payments-db",
+        "redis-cache"
+      ]
+    },
+    {
+      "name": "payments-db",
+      "type": "database"
+    },
+    {
+      "name": "redis-cache",
+      "type": "cache"
+    }
+  ],
+  "timeline": [
+    {
+      "timestamp": "2026-04-24T09:00:00Z",
+      "severity": "medium",
+      "title": "Replication lag climbs",
+      "description": "Replica lag exceeded 40 seconds after a batch settlement burst.",
+      "service": "payments-db"
+    },
+    {
+      "timestamp": "2026-04-24T09:04:00Z",
+      "severity": "critical",
+      "title": "Automatic failover triggered",
+      "description": "Failover automation promoted a lagging standby to primary.",
+      "service": "payments-db"
+    },
+    {
+      "timestamp": "2026-04-24T09:06:00Z",
+      "severity": "high",
+      "title": "Checkout timeouts spike",
+      "description": "Checkout API exceeded the latency SLO and retried against stale database connections.",
+      "service": "checkout-api"
+    },
+    {
+      "timestamp": "2026-04-24T09:10:00Z",
+      "severity": "medium",
+      "title": "Traffic shed and rollback",
+      "description": "Operators drained write traffic and restored the original primary.",
+      "service": "checkout-api"
+    }
+  ]
+}
