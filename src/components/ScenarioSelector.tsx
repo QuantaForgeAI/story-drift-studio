@@ -6,6 +6,8 @@ interface Props {
   scenarios: Scenario[];
   activeId: string | null;
   onSelect: (id: string) => void;
+  onDelete?: (id: string) => void;
+  customScenarioIds?: string[];
 }
 
 const severityColor: Record<Severity, string> = {
@@ -26,7 +28,7 @@ const severityBg: Record<Severity, string> = {
 
 const icons = [Shield, Activity, Zap];
 
-export const ScenarioSelector: React.FC<Props> = ({ scenarios, activeId, onSelect }) => {
+export const ScenarioSelector: React.FC<Props> = ({ scenarios, activeId, onSelect, onDelete, customScenarioIds = [] }) => {
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 px-2 mb-3">
@@ -36,33 +38,45 @@ export const ScenarioSelector: React.FC<Props> = ({ scenarios, activeId, onSelec
       {scenarios.map((s, i) => {
         const Icon = icons[i % icons.length];
         const active = s.id === activeId;
+        const isCustom = customScenarioIds.includes(s.id);
         return (
-          <button
-            key={s.id}
-            onClick={() => onSelect(s.id)}
-            className={`w-full text-left p-3 rounded-lg transition-all border ${
-              active
-                ? "glass-panel-elevated border-primary/30 neon-glow"
-                : "border-transparent hover:bg-secondary/50"
-            }`}
-          >
-            <div className="flex items-start gap-2.5">
-              <div className={`p-1.5 rounded-md ${severityBg[s.severity]} mt-0.5`}>
-                <Icon className={`h-3.5 w-3.5 ${severityColor[s.severity]}`} />
-              </div>
-              <div className="min-w-0">
-                <h4 className="font-heading text-xs text-foreground truncate">{s.name}</h4>
-                <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2 leading-relaxed">{s.subtitle}</p>
-                <div className="flex items-center gap-2 mt-1.5">
-                  <span className={`font-mono text-[9px] font-bold ${severityColor[s.severity]}`}>
-                    {s.severity.toUpperCase()}
-                  </span>
-                  <span className="text-[9px] text-muted-foreground font-mono">{s.events.length} events</span>
-                  <span className="text-[9px] text-muted-foreground font-mono">{Math.floor(s.duration / 60)}m{s.duration % 60}s</span>
+          <div key={s.id} className="relative group">
+            <button
+              onClick={() => onSelect(s.id)}
+              className={`w-full text-left p-3 rounded-lg transition-all border ${
+                active
+                  ? "glass-panel-elevated border-primary/30 neon-glow"
+                  : "border-transparent hover:bg-secondary/50"
+              }`}
+            >
+              <div className="flex items-start gap-2.5">
+                <div className={`p-1.5 rounded-md ${severityBg[s.severity]} mt-0.5`}>
+                  <Icon className={`h-3.5 w-3.5 ${severityColor[s.severity]}`} />
+                </div>
+                <div className="min-w-0">
+                  <h4 className="font-heading text-xs text-foreground truncate">{s.name}</h4>
+                  <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2 leading-relaxed">{s.subtitle}</p>
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <span className={`font-mono text-[9px] font-bold ${severityColor[s.severity]}`}>
+                      {s.severity.toUpperCase()}
+                    </span>
+                    <span className="text-[9px] text-muted-foreground font-mono">{s.events.length} events</span>
+                    <span className="text-[9px] text-muted-foreground font-mono">{Math.floor(s.duration / 60)}m{s.duration % 60}s</span>
+                  </div>
                 </div>
               </div>
-            </div>
-          </button>
+            </button>
+            {isCustom && onDelete && (
+              <button
+                title="Delete custom scenario"
+                onClick={() => onDelete(s.id)}
+                className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity text-xs text-destructive hover:text-destructive/80"
+                style={{ zIndex: 2 }}
+              >
+                ×
+              </button>
+            )}
+          </div>
         );
       })}
     </div>

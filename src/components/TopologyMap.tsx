@@ -1,21 +1,14 @@
 import React, { useMemo } from "react";
 import type { TopologyNode, TopologyEdge } from "@/data/scenarios";
+import { TopologyNodeIcon } from "@/components/TopologyNodeIcon";
 
 interface Props {
   nodes: TopologyNode[];
   edges: TopologyEdge[];
   nodeStates: Map<string, TopologyNode["status"]>;
   affectedNodes: string[];
+  onNodePositionChange?: (id: string, x: number, y: number) => void;
 }
-
-const typeIcons: Record<TopologyNode["type"], string> = {
-  service: "⚙",
-  database: "🗄",
-  gateway: "🌐",
-  queue: "📨",
-  cache: "⚡",
-  external: "☁",
-};
 
 const statusColors: Record<TopologyNode["status"], string> = {
   healthy: "stroke-severity-low",
@@ -31,8 +24,76 @@ const statusFillColors: Record<TopologyNode["status"], string> = {
   unknown: "fill-muted/20",
 };
 
-export const TopologyMap: React.FC<Props> = ({ nodes, edges, nodeStates, affectedNodes }) => {
+export const TopologyMap: React.FC<Props> = ({ nodes, edges, nodeStates, affectedNodes, onNodePositionChange }) => {
   const nodeMap = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
+  const svgRef = React.useRef<SVGSVGElement>(null);
+  const [dragging, setDragging] = React.useState<string | null>(null);
+
+  // Convert screen coordinates to SVG coordinates
+  const screenToSvg = React.useCallback((clientX: number, clientY: number): { x: number; y: number } | null => {
+    if (!svgRef.current) return null;
+    const svg = svgRef.current;
+    const pt = svg.createSVGPoint();
+    pt.x = clientX;
+    pt.y = clientY;
+    const screenCTM = svg.getScreenCTM();
+    if (!screenCTM) return null;
+    const svgPt = pt.matrixTransform(screenCTM.inverse());
+    return { x: svgPt.x, y: svgPt.y };
+  }, []);
+
+  const handleMouseDown = React.useCallback((e: React.MouseEvent, node: TopologyNode) => {
+    if (!onNodePositionChange) return;
+    setDragging(node.id);
+    e.preventDefault();
+  }, [onNodePositionChange]);
+
+  const handleMouseMove = React.useCallback((e: MouseEvent) => {
+    const drag = dragging;
+    if (!drag || !onNodePositionChange) return;
+    const svgCoords = screenToSvg(e.clientX, e.clientY);
+    if (!svgCoords) return;
+    onNodePositionChange(drag, svgCoords.x, svgCoords.y);
+  }, [dragging, onNodePositionChange, screenToSvg]);
+
+  const handleMouseUp = React.useCallback(() => {
+    setDragging(null);
+  }, []);
+
+  const handleTouchStart = React.useCallback((e: React.TouchEvent, node: TopologyNode) => {
+    if (!onNodePositionChange) return;
+    setDragging(node.id);
+    e.preventDefault();
+  }, [onNodePositionChange]);
+
+  const handleTouchMove = React.useCallback((e: TouchEvent) => {
+    const drag = dragging;
+    if (!drag || !onNodePositionChange) return;
+    const touch = e.touches[0];
+    const svgCoords = screenToSvg(touch.clientX, touch.clientY);
+    if (!svgCoords) return;
+    onNodePositionChange(drag, svgCoords.x, svgCoords.y);
+  }, [dragging, onNodePositionChange, screenToSvg]);
+
+  const handleTouchEnd = React.useCallback(() => {
+    setDragging(null);
+  }, []);
+
+  // Global move/end listeners
+  React.useEffect(() => {
+    if (dragging) {
+      window.addEventListener("mousemove", handleMouseMove);
+      window.addEventListener("mouseup", handleMouseUp);
+      window.addEventListener("touchmove", handleTouchMove);
+      window.addEventListener("touchend", handleTouchEnd);
+      return () => {
+        window.removeEventListener("mousemove", handleMouseMove);
+        window.removeEventListener("mouseup", handleMouseUp);
+        window.removeEventListener("touchmove", handleTouchMove);
+        window.removeEventListener("touchend", handleTouchEnd);
+      };
+    }
+  }, [dragging, handleMouseMove, handleMouseUp, handleTouchMove, handleTouchEnd]);
 
   // Compute which edges are "propagating" (both endpoints not healthy, at least one down/degraded)
   const edgePropagation = useMemo(() => {
@@ -51,7 +112,7 @@ export const TopologyMap: React.FC<Props> = ({ nodes, edges, nodeStates, affecte
         <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
         <h3 className="font-heading text-xs uppercase tracking-widest text-muted-foreground">System Topology</h3>
       </div>
-      <svg viewBox="0 0 800 400" className="flex-1 w-full" preserveAspectRatio="xMidYMid meet">
+      <svg ref={svgRef} viewBox="0 0 800 400" className="flex-1 w-full" preserveAspectRatio="xMidYMid meet">
         <defs>
           <filter id="glow">
             <feGaussianBlur stdDeviation="3" result="blur" />
@@ -178,7 +239,7 @@ export const TopologyMap: React.FC<Props> = ({ nodes, edges, nodeStates, affecte
           const status = nodeStates.get(node.id) ?? node.status;
           const isAffected = affectedNodes.includes(node.id);
           return (
-            <g key={node.id}>
+            <g key={node.id} style={{ cursor: onNodePositionChange ? "grab" : undefined }}>
               {/* Pulse ring for affected */}
               {(status === "down" || isAffected) && (
                 <circle cx={node.x} cy={node.y} r={32} className="fill-none stroke-severity-critical/30" strokeWidth={2} filter="url(#glow-critical)">
@@ -193,7 +254,7 @@ export const TopologyMap: React.FC<Props> = ({ nodes, edges, nodeStates, affecte
                 </circle>
               )}
 
-              {/* Main circle */}
+              {/* Main circle with drag events */}
               <circle
                 cx={node.x}
                 cy={node.y}
@@ -201,12 +262,28 @@ export const TopologyMap: React.FC<Props> = ({ nodes, edges, nodeStates, affecte
                 className={`${statusFillColors[status]} ${statusColors[status]}`}
                 strokeWidth={2}
                 filter={status !== "healthy" ? "url(#glow)" : undefined}
+                onMouseDown={onNodePositionChange ? (e) => handleMouseDown(e, node) : undefined}
+                onTouchStart={onNodePositionChange ? (e) => handleTouchStart(e, node) : undefined}
+                style={{ cursor: onNodePositionChange ? "grab" : undefined }}
               />
 
               {/* Icon */}
-              <text x={node.x} y={node.y + 1} textAnchor="middle" dominantBaseline="central" className="text-sm select-none" fontSize="14">
-                {typeIcons[node.type]}
-              </text>
+              <g transform={`translate(${node.x - 9} ${node.y - 9})`} pointerEvents="none">
+                <TopologyNodeIcon
+                  type={node.type}
+                  size={18}
+                  strokeWidth={status === "healthy" ? 1.9 : 2.1}
+                  className={
+                    status === "down"
+                      ? "text-severity-critical"
+                      : status === "degraded"
+                      ? "text-severity-medium"
+                      : status === "unknown"
+                      ? "text-muted-foreground"
+                      : undefined
+                  }
+                />
+              </g>
 
               {/* Label */}
               <text

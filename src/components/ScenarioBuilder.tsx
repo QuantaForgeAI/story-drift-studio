@@ -1,23 +1,36 @@
 import React, { useState, useCallback } from "react";
-import { Plus, Trash2, Play, X, Link2, Zap, Save } from "lucide-react";
+import { Plus, Trash2, X, Link2, Zap, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { TopologyNodeIcon } from "@/components/TopologyNodeIcon";
 import type { Scenario, TopologyNode, TopologyEdge, TimelineEvent, Severity } from "@/data/scenarios";
+import {
+  defaultTopologyNodeType,
+  featuredTopologyNodeTypes,
+  getTopologyNodeDefinition,
+  getTopologyNodeLabel,
+  renameDefaultTopologyNodeLabel,
+  topologyNodeTypeGroups,
+} from "@/lib/topologyNodes";
+import { SCENARIO_SCHEMA_VERSION } from "@/lib/scenarioConstants";
 
 interface Props {
   onSave: (scenario: Scenario) => void;
   onClose: () => void;
 }
 
-const nodeTypes: TopologyNode["type"][] = ["service", "database", "gateway", "queue", "cache", "external"];
 const eventTypes: TimelineEvent["type"][] = ["drift", "alert", "failure", "recovery", "injection", "cascade"];
 const severities: Severity[] = ["critical", "high", "medium", "low", "info"];
-
-const typeIcons: Record<TopologyNode["type"], string> = {
-  service: "⚙", database: "🗄", gateway: "🌐", queue: "📨", cache: "⚡", external: "☁",
-};
 
 const defaultPositions = [
   { x: 400, y: 60 }, { x: 200, y: 180 }, { x: 400, y: 180 }, { x: 600, y: 180 },
@@ -44,6 +57,7 @@ export const ScenarioBuilder: React.FC<Props> = ({ onSave, onClose }) => {
 
   // Nodes
   const [nodes, setNodes] = useState<TopologyNode[]>([]);
+  const [newNodeType, setNewNodeType] = useState<TopologyNode["type"]>(defaultTopologyNodeType);
 
   // Edges
   const [edges, setEdges] = useState<TopologyEdge[]>([]);
@@ -51,17 +65,42 @@ export const ScenarioBuilder: React.FC<Props> = ({ onSave, onClose }) => {
   // Events
   const [events, setEvents] = useState<TimelineEvent[]>([]);
 
-  const addNode = useCallback(() => {
-    const pos = defaultPositions[nodes.length % defaultPositions.length];
+  const addNode = useCallback((type: TopologyNode["type"] = newNodeType) => {
     const id = `node-${Date.now()}`;
-    setNodes((prev) => [
-      ...prev,
-      { id, label: `Service ${prev.length + 1}`, type: "service", x: pos.x, y: pos.y, status: "healthy" },
-    ]);
-  }, [nodes.length]);
+    setNodes((prev) => {
+      const pos = defaultPositions[prev.length % defaultPositions.length];
+      const sameTypeCount = prev.filter((node) => node.type === type).length + 1;
+
+      return [
+        ...prev,
+        {
+          id,
+          label: getTopologyNodeLabel(type, sameTypeCount),
+          type,
+          x: pos.x,
+          y: pos.y,
+          status: "healthy",
+        },
+      ];
+    });
+  }, [newNodeType]);
 
   const updateNode = useCallback((idx: number, patch: Partial<TopologyNode>) => {
     setNodes((prev) => prev.map((n, i) => (i === idx ? { ...n, ...patch } : n)));
+  }, []);
+
+  const updateNodeType = useCallback((idx: number, nextType: TopologyNode["type"]) => {
+    setNodes((prev) =>
+      prev.map((node, nodeIdx) => {
+        if (nodeIdx !== idx) return node;
+
+        return {
+          ...node,
+          type: nextType,
+          label: renameDefaultTopologyNodeLabel(node.label, node.type, nextType),
+        };
+      }),
+    );
   }, []);
 
   const removeNode = useCallback((idx: number) => {
@@ -121,6 +160,7 @@ export const ScenarioBuilder: React.FC<Props> = ({ onSave, onClose }) => {
 
   const handleSave = () => {
     const scenario: Scenario = {
+      schemaVersion: SCENARIO_SCHEMA_VERSION,
       id: `custom-${Date.now()}`,
       name: name || "Custom Scenario",
       subtitle: subtitle || "User-created incident scenario",
@@ -142,6 +182,7 @@ export const ScenarioBuilder: React.FC<Props> = ({ onSave, onClose }) => {
 
   const stepIdx = steps.findIndex((s) => s.key === step);
   const canNext = step === "meta" ? name.length > 0 : step === "nodes" ? nodes.length >= 2 : step === "edges" ? edges.length >= 1 : step === "events" ? events.length >= 1 : true;
+  const nextNodeDefinition = getTopologyNodeDefinition(newNodeType);
 
   return (
     <div className="glass-panel p-5 h-full flex flex-col overflow-hidden">
@@ -208,29 +249,115 @@ export const ScenarioBuilder: React.FC<Props> = ({ onSave, onClose }) => {
 
         {step === "nodes" && (
           <>
-            <div className="flex items-center justify-between">
-              <span className="font-mono text-[10px] text-muted-foreground">{nodes.length} nodes</span>
-              <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={addNode}>
-                <Plus className="h-3 w-3" /> Add Node
-              </Button>
+            <div className="glass-panel-elevated p-3 space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-mono text-[10px] text-muted-foreground">{nodes.length} nodes</span>
+                <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => addNode()}>
+                  <Plus className="h-3 w-3" /> Add {nextNodeDefinition.label}
+                </Button>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                <div className="space-y-1">
+                  <label className="font-mono text-[10px] text-muted-foreground uppercase tracking-wider block">Node Type</label>
+                  <Select value={newNodeType} onValueChange={(v) => setNewNodeType(v as TopologyNode["type"])}>
+                    <SelectTrigger className="bg-secondary/50 border-border/50 h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-80">
+                      {topologyNodeTypeGroups.map((group) => (
+                        <SelectGroup key={group.label}>
+                          <SelectLabel className="pl-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+                            {group.label}
+                          </SelectLabel>
+                          {group.types.map((type) => (
+                            <SelectItem key={type} value={type} className="text-xs">
+                              <span className="flex items-center gap-2">
+                                <TopologyNodeIcon type={type} size={13} />
+                                <span>{getTopologyNodeDefinition(type).label}</span>
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button variant="secondary" size="sm" className="h-8 text-xs gap-1.5" onClick={() => addNode()}>
+                  <Plus className="h-3 w-3" /> Add Node
+                </Button>
+              </div>
+              <p className="text-[10px] text-muted-foreground">{nextNodeDefinition.description}</p>
+              <div>
+                <span className="font-mono text-[9px] text-muted-foreground uppercase mb-1.5 block">Quick Add</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {featuredTopologyNodeTypes.map((type) => {
+                    const definition = getTopologyNodeDefinition(type);
+
+                    return (
+                      <button
+                        key={type}
+                        type="button"
+                        title={definition.description}
+                        onClick={() => {
+                          setNewNodeType(type);
+                          addNode(type);
+                        }}
+                        className={`flex items-center gap-1.5 rounded-md border px-2 py-1 text-[10px] font-mono transition-all ${
+                          newNodeType === type
+                            ? "border-primary/40 bg-primary/15 text-foreground"
+                            : "border-border/50 bg-secondary/40 text-muted-foreground hover:border-border hover:text-foreground"
+                        }`}
+                      >
+                        <TopologyNodeIcon type={type} size={12} />
+                        <span>{definition.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
             {nodes.map((node, i) => (
-              <div key={node.id} className="glass-panel-elevated p-3 space-y-2">
+              <div key={node.id} className="glass-panel-elevated p-3 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm">{typeIcons[node.type]} {node.label || "Unnamed"}</span>
+                  <span className="flex items-center gap-2 text-sm">
+                    <TopologyNodeIcon type={node.type} size={14} />
+                    <span className="flex flex-col">
+                      <span>{node.label || "Unnamed"}</span>
+                      <span className="font-mono text-[9px] uppercase tracking-wider text-muted-foreground">
+                        {getTopologyNodeDefinition(node.type).label}
+                      </span>
+                    </span>
+                  </span>
                   <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-severity-critical" onClick={() => removeNode(i)}>
                     <Trash2 className="h-3 w-3" />
                   </Button>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row">
                   <Input value={node.label} onChange={(e) => updateNode(i, { label: e.target.value })} placeholder="Label" className="bg-secondary/50 border-border/50 text-xs h-7 flex-1" />
-                  <Select value={node.type} onValueChange={(v) => updateNode(i, { type: v as TopologyNode["type"] })}>
-                    <SelectTrigger className="bg-secondary/50 border-border/50 h-7 text-xs w-28"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {nodeTypes.map((t) => <SelectItem key={t} value={t} className="text-xs">{typeIcons[t]} {t}</SelectItem>)}
+                  <Select value={node.type} onValueChange={(v) => updateNodeType(i, v as TopologyNode["type"])}>
+                    <SelectTrigger className="bg-secondary/50 border-border/50 h-7 text-xs w-full sm:w-44"><SelectValue /></SelectTrigger>
+                    <SelectContent className="max-h-80">
+                      {topologyNodeTypeGroups.map((group) => (
+                        <SelectGroup key={group.label}>
+                          <SelectLabel className="pl-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+                            {group.label}
+                          </SelectLabel>
+                          {group.types.map((type) => (
+                            <SelectItem key={type} value={type} className="text-xs">
+                              <span className="flex items-center gap-2">
+                                <TopologyNodeIcon type={type} size={13} />
+                                <span>{getTopologyNodeDefinition(type).label}</span>
+                              </span>
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
+                <p className="text-[10px] text-muted-foreground">
+                  {getTopologyNodeDefinition(node.type).description}
+                </p>
               </div>
             ))}
             {nodes.length === 0 && (
@@ -372,7 +499,9 @@ export const ScenarioBuilder: React.FC<Props> = ({ onSave, onClose }) => {
                 {nodes.map((n) => (
                   <g key={n.id}>
                     <circle cx={n.x} cy={n.y} r={16} className="fill-severity-low/20 stroke-severity-low" strokeWidth={1.5} />
-                    <text x={n.x} y={n.y + 1} textAnchor="middle" dominantBaseline="central" fontSize="10">{typeIcons[n.type]}</text>
+                    <g transform={`translate(${n.x - 6} ${n.y - 6})`} pointerEvents="none">
+                      <TopologyNodeIcon type={n.type} size={12} strokeWidth={2} />
+                    </g>
                   </g>
                 ))}
               </svg>
