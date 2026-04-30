@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "id": "example-api-cache-cascade",
+  "name": "API Cache Cascade",
+  "subtitle": "Redis degradation causes database amplification and API failure",
+  "severity": "high",
+  "duration": 180,
+  "nodes": [
+    { "id": "gateway", "label": "API Gateway", "type": "gateway", "x": 400, "y": 60, "status": "healthy" },
+    { "id": "api", "label": "Checkout API", "type": "service", "x": 400, "y": 170, "status": "healthy" },
+    { "id": "cache", "label": "Redis Cache", "type": "cache", "x": 240, "y": 300, "status": "healthy" },
+    { "id": "db", "label": "PostgreSQL", "type": "database", "x": 560, "y": 300, "status": "healthy" }
+  ],
+  "edges": [
+    { "from": "gateway", "to": "api", "animated": true },
+    { "from": "api", "to": "cache", "animated": true },
+    { "from": "api", "to": "db", "animated": true }
+  ],
+  "events": [
+    {
+      "id": "evt-1",
+      "timestamp": 20,
+      "type": "alert",
+      "severity": "medium",
+      "title": "Cache memory saturation",
+      "description": "Redis memory usage crossed 85 percent and eviction pressure increased.",
+      "affectedNodes": ["cache"]
+    },
+    {
+      "id": "evt-2",
+      "timestamp": 45,
+      "type": "failure",
+      "severity": "high",
+      "title": "Cache connection pool exhausted",
+      "description": "Application workers could no longer acquire Redis connections.",
+      "affectedNodes": ["cache", "api"]
+    },
+    {
+      "id": "evt-3",
+      "timestamp": 60,
+      "type": "cascade",
+      "severity": "critical",
+      "title": "Database query amplification",
+      "description": "Cache bypass increased database load by 9x and saturated primary connections.",
+      "affectedNodes": ["db", "api"]
+    },
+    {
+      "id": "evt-4",
+      "timestamp": 135,
+      "type": "recovery",
+      "severity": "info",
+      "title": "Cache nodes recycled",
+      "description": "Redis shard restarted and connection pools stabilized.",
+      "affectedNodes": ["cache", "api"]
+    }
+  ],
+  "narrative": {
+    "executiveSummary": "Redis instability caused the checkout API to fall back to the database, producing a short but severe latency incident.",
+    "technicalSummary": "Connection pool exhaustion in the cache layer caused request amplification against PostgreSQL. Database saturation then propagated back into the API tier until the cache cluster was recycled.",
+    "rootCause": "Redis memory pressure and stale connection reuse caused repeated cache connection failures under load.",
+    "actions": [
+      "Add cache connection pool health metrics and alerts",
+      "Apply request shedding before falling back to the database",
+      "Load test cache failure paths during peak traffic simulations"
+    ],
+    "impactScore": 70
+  }
+}

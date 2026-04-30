@@ -15,28 +15,28 @@ This checklist tracks the recommendations needed to move the project from polish
 
 ## Phase 2: Product Foundations
 
-- [ ] Add a backend data model for scenarios, drafts, published versions, and replay snapshots.
-- [ ] Add authentication, organization membership, and role-based access control.
-- [ ] Add audit logs for scenario creation, edits, imports, deletes, and playback sessions.
-- [ ] Add shareable permalinks and version history for scenarios.
-- [ ] Add collaboration-safe editing flows and conflict handling.
-- [ ] Add structured server-side logging and error reporting.
+- [x] Add a backend data model for scenarios, drafts, published versions, and replay snapshots.
+- [x] Add authentication, organization membership, and role-based access control.
+- [x] Add audit logs for scenario creation, edits, imports, deletes, and playback sessions.
+- [x] Add shareable permalinks and version history for scenarios.
+- [x] Add collaboration-safe editing flows and conflict handling.
+- [x] Add structured server-side logging and error reporting.
 
 ## Phase 3: Enterprise Platform Readiness
 
-- [ ] Add tenant isolation and production-grade storage strategy.
-- [ ] Add SSO/OIDC integration for enterprise customers.
-- [ ] Add observability for client and server behavior, with clear caveats for browser telemetry maturity.
-- [ ] Add performance budgets and release gates.
-- [ ] Add accessibility hardening aligned with WCAG 2.2.
-- [ ] Add security verification workflows aligned with OWASP ASVS.
-- [ ] Add CI quality gates for tests, bundle health, and release readiness.
+- [x] Add tenant isolation and production-grade storage strategy.
+- [x] Add SSO/OIDC integration for enterprise customers.
+- [x] Add observability for client and server behavior, with clear caveats for browser telemetry maturity.
+- [x] Add performance budgets and release gates.
+- [x] Add accessibility hardening aligned with WCAG 2.2.
+- [x] Add security verification workflows aligned with OWASP ASVS.
+- [x] Add CI quality gates for tests, bundle health, and release readiness.
 
 ## Phase 4: Developer Wow Factor
 
-- [ ] Add scenario diffing and replay comparison.
-- [ ] Add import pipelines from real system inputs such as Kubernetes, Terraform, or incident artifacts.
-- [ ] Add richer export flows for reports, postmortems, and stakeholder playback links.
-- [ ] Add a premium documentation/storytelling layer with architecture docs, examples, and launch assets.
-- [ ] Add Storybook-driven visual coverage for the design system and major simulator states.
-- [ ] Add collaborative and presentation-grade UX polish for demos and workshops.
+- [x] Add scenario diffing and replay comparison.
+- [x] Add import pipelines from real system inputs such as Kubernetes, Terraform, or incident artifacts.
+- [x] Add richer export flows for reports, postmortems, and stakeholder playback links.
+- [x] Add a premium documentation/storytelling layer with architecture docs, examples, and launch assets.
+- [x] Add Storybook-driven visual coverage for the design system and major simulator states.
+- [x] Add collaborative and presentation-grade UX polish for demos and workshops.

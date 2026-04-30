@@ -1,0 +1,57 @@
+name: Quality Gates
+
+on:
+  pull_request:
+  push:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-gates-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-readiness:
+    name: Release Readiness
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run release gate
+        run: npm run release:gate
+
+      - name: Capture performance budget report
+        run: node ./scripts/performance-budgets.mjs | tee performance-budget-report.txt
+
+      - name: Publish release summary
+        run: |
+          echo "## Release gate passed" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Node.js: 20" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Commands: \`npm run release:gate\`, \`node ./scripts/performance-budgets.mjs\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo '```text' >> "$GITHUB_STEP_SUMMARY"
+          cat performance-budget-report.txt >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-readiness-artifacts
+          path: |
+            dist
+            performance-budget-report.txt
+          if-no-files-found: error

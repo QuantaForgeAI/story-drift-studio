@@ -4,6 +4,7 @@ import {
   getNextTimelineTime,
   getTimelineSnapshot,
 } from "@/lib/simulation-core";
+import { recordTelemetrySample } from "@/lib/scenarioObservability";
 
 export interface TimelineState {
   currentTime: number;
@@ -27,12 +28,47 @@ export function useTimelineEngine(scenario: Scenario | null) {
   const intervalRef = useRef<number | null>(null);
   const scenarioRef = useRef(scenario);
   scenarioRef.current = scenario;
+  const lastSampledEventCountRef = useRef<number | null>(null);
+
+  const recordSimulationTelemetry = useCallback(
+    (
+      name: string,
+      startedAt: number,
+      details?: Record<string, unknown>,
+    ) => {
+      const sc = scenarioRef.current;
+      recordTelemetrySample({
+        source: "client",
+        scope: "simulation",
+        name,
+        value:
+          (typeof performance !== "undefined" && typeof performance.now === "function"
+            ? performance.now()
+            : Date.now()) - startedAt,
+        unit: "ms",
+        scenarioId: sc?.id ?? null,
+        scenarioName: sc?.name ?? null,
+        details,
+        notify: false,
+      });
+    },
+    [],
+  );
 
   const updateTime = useCallback(
     (time: number) => {
       const sc = scenarioRef.current;
       if (!sc) return;
+      const startedAt =
+        typeof performance !== "undefined" && typeof performance.now === "function"
+          ? performance.now()
+          : Date.now();
       const snapshot = getTimelineSnapshot(sc, time);
+      recordSimulationTelemetry("simulation.seek_compute", startedAt, {
+        targetTime: snapshot.currentTime,
+        activeEventCount: snapshot.activeEvents.length,
+        currentEventId: snapshot.currentEvent?.id ?? null,
+      });
       setState((prev) => ({
         ...prev,
         currentTime: snapshot.currentTime,
@@ -41,16 +77,24 @@ export function useTimelineEngine(scenario: Scenario | null) {
         nodeStates: snapshot.nodeStates,
       }));
     },
-    []
+    [recordSimulationTelemetry]
   );
 
   const play = useCallback(() => {
     const sc = scenarioRef.current;
     if (!sc) return;
+    const startedAt =
+      typeof performance !== "undefined" && typeof performance.now === "function"
+        ? performance.now()
+        : Date.now();
 
     setState((prev) => {
       const shouldRestart = prev.currentTime >= sc.duration;
       const snapshot = getTimelineSnapshot(sc, shouldRestart ? 0 : prev.currentTime);
+      recordSimulationTelemetry("simulation.play_start_compute", startedAt, {
+        restarted: shouldRestart,
+        activeEventCount: snapshot.activeEvents.length,
+      });
       return {
         ...prev,
         currentTime: snapshot.currentTime,
@@ -60,7 +104,7 @@ export function useTimelineEngine(scenario: Scenario | null) {
         isPlaying: true,
       };
     });
-  }, []);
+  }, [recordSimulationTelemetry]);
 
   const pause = useCallback(() => {
     setState((prev) => ({ ...prev, isPlaying: false }));
@@ -89,8 +133,25 @@ export function useTimelineEngine(scenario: Scenario | null) {
           const sc = scenarioRef.current;
           if (!prev.isPlaying || !sc) return prev;
 
+          const startedAt =
+            typeof performance !== "undefined" && typeof performance.now === "function"
+              ? performance.now()
+              : Date.now();
           const nextTime = getNextTimelineTime(prev.currentTime, prev.speed, sc.duration);
           const snapshot = getTimelineSnapshot(sc, nextTime);
+          const shouldSample =
+            lastSampledEventCountRef.current == null ||
+            lastSampledEventCountRef.current !== snapshot.activeEvents.length ||
+            snapshot.isComplete;
+
+          if (shouldSample) {
+            lastSampledEventCountRef.current = snapshot.activeEvents.length;
+            recordSimulationTelemetry("simulation.tick_compute", startedAt, {
+              currentTime: snapshot.currentTime,
+              activeEventCount: snapshot.activeEvents.length,
+              isComplete: snapshot.isComplete,
+            });
+          }
 
           return {
             ...prev,
@@ -105,11 +166,12 @@ export function useTimelineEngine(scenario: Scenario | null) {
       return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
     }
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [state.isPlaying, scenario]);
+  }, [recordSimulationTelemetry, state.isPlaying, scenario]);
 
   // Reset when scenario changes
   useEffect(() => {
     reset();
+    lastSampledEventCountRef.current = null;
     if (scenario) updateTime(0);
   }, [scenario, reset, updateTime]);
 

@@ -1,0 +1,136 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: checkout-public
+  namespace: commerce
+spec:
+  rules:
+    - host: checkout.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: checkout-web
+                port:
+                  number: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: checkout-web
+  namespace: commerce
+spec:
+  selector:
+    app: checkout-web
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout-web
+  namespace: commerce
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: checkout-web
+  template:
+    metadata:
+      labels:
+        app: checkout-web
+    spec:
+      serviceAccountName: checkout-runtime
+      containers:
+        - name: checkout-web
+          image: ghcr.io/example/checkout-web:2026.04.1
+          envFrom:
+            - secretRef:
+                name: checkout-secrets
+          volumeMounts:
+            - name: checkout-cache
+              mountPath: /var/cache/checkout
+      volumes:
+        - name: checkout-cache
+          persistentVolumeClaim:
+            claimName: checkout-cache
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: payments-api
+  namespace: commerce
+spec:
+  selector:
+    app: payments-api
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: payments-api
+  namespace: commerce
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: payments-api
+  template:
+    metadata:
+      labels:
+        app: payments-api
+    spec:
+      serviceAccountName: checkout-runtime
+      containers:
+        - name: payments-api
+          image: ghcr.io/example/payments-api:2026.04.1
+          envFrom:
+            - secretRef:
+                name: checkout-secrets
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: checkout-secrets
+  namespace: commerce
+type: Opaque
+stringData:
+  DATABASE_URL: postgresql://checkout-db.internal/commerce
+  REDIS_URL: redis://checkout-cache.internal:6379
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: checkout-cache
+  namespace: commerce
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: checkout-runtime
+  namespace: commerce
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: checkout-web-egress
+  namespace: commerce
+spec:
+  podSelector:
+    matchLabels:
+      app: checkout-web
+  policyTypes:
+    - Egress
