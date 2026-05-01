@@ -3,11 +3,19 @@ import type { TimelineEvent, TopologyNode, TopologyEdge } from "@/data/scenarios
 import { TopologyNodeIcon } from "@/components/TopologyNodeIcon";
 import { useMotionMode, usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 
-interface Props {
+export interface TopologyState {
   nodes: TopologyNode[];
   edges: TopologyEdge[];
   nodeStates: Map<string, TopologyNode["status"]>;
   affectedNodes: string[];
+}
+
+interface Props {
+  topologyState?: TopologyState;
+  nodes?: TopologyNode[];
+  edges?: TopologyEdge[];
+  nodeStates?: Map<string, TopologyNode["status"]>;
+  affectedNodes?: string[];
   activeEvents?: TimelineEvent[];
   currentEvent?: TimelineEvent | null;
   onNodePositionChange?: (id: string, x: number, y: number) => void;
@@ -28,13 +36,21 @@ const statusFillColors: Record<TopologyNode["status"], string> = {
 };
 
 export const TopologyMap: React.FC<Props> = ({
+  topologyState,
   nodes,
   edges,
   nodeStates,
   affectedNodes,
   onNodePositionChange,
 }) => {
-  const nodeMap = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
+  const topology = topologyState ?? {
+    nodes: nodes ?? [],
+    edges: edges ?? [],
+    nodeStates: nodeStates ?? new Map<string, TopologyNode["status"]>(),
+    affectedNodes: affectedNodes ?? [],
+  };
+
+  const nodeMap = useMemo(() => new Map(topology.nodes.map((n) => [n.id, n])), [topology.nodes]);
   const svgRef = React.useRef<SVGSVGElement>(null);
   const [dragging, setDragging] = React.useState<string | null>(null);
   const [focusedNodeId, setFocusedNodeId] = React.useState<string | null>(null);
@@ -44,20 +60,20 @@ export const TopologyMap: React.FC<Props> = ({
   const titleId = `${topologyId}-system-topology-title`;
   const summaryId = `${topologyId}-system-topology-summary`;
   const instructionsId = `${topologyId}-system-topology-instructions`;
-  const affectedNodeSet = React.useMemo(() => new Set(affectedNodes), [affectedNodes]);
+  const affectedNodeSet = React.useMemo(() => new Set(topology.affectedNodes), [topology.affectedNodes]);
   const hasIncidentActivity = React.useMemo(() => {
     if (affectedNodeSet.size > 0) {
       return true;
     }
 
-    for (const status of nodeStates.values()) {
+    for (const status of topology.nodeStates.values()) {
       if (status === "degraded" || status === "down") {
         return true;
       }
     }
 
     return false;
-  }, [affectedNodeSet, nodeStates]);
+  }, [affectedNodeSet, topology.nodeStates]);
   const criticalPulse = prefersReducedMotion
     ? { duration: "4s", opacity: "0.2;0.36;0.2" }
     : { duration: "2s", radius: "28;36;28", opacity: "0.5;0.2;0.5" };
@@ -156,19 +172,19 @@ export const TopologyMap: React.FC<Props> = ({
 
   // Match the reference topology behavior: animate any edge touching degraded/down nodes.
   const edgePropagation = useMemo(() => {
-    return edges.map((edge) => {
-      const fromStatus = nodeStates.get(edge.from) ?? "healthy";
-      const toStatus = nodeStates.get(edge.to) ?? "healthy";
+    return topology.edges.map((edge) => {
+      const fromStatus = topology.nodeStates.get(edge.from) ?? "healthy";
+      const toStatus = topology.nodeStates.get(edge.to) ?? "healthy";
       const isAffected = fromStatus === "down" || toStatus === "down";
       const isDegraded = fromStatus === "degraded" || toStatus === "degraded";
       const hasAnimatedTraffic = edge.animated === true;
       return { edge, hasAnimatedTraffic, isAffected, isDegraded };
     });
-  }, [edges, nodeStates]);
+  }, [topology.edges, topology.nodeStates]);
 
   return (
     <section
-      className="glass-panel flex h-full flex-col p-4"
+      className="glass-panel flex h-full min-h-0 flex-col p-4"
       aria-labelledby={titleId}
       aria-describedby={`${summaryId} ${instructionsId}`}
     >
@@ -179,7 +195,7 @@ export const TopologyMap: React.FC<Props> = ({
         </h3>
       </div>
       <p id={summaryId} className="sr-only">
-        Topology view with {nodes.length} nodes and {edges.length} connections. {affectedNodes.length} nodes are currently affected.
+        Topology view with {topology.nodes.length} nodes and {topology.edges.length} connections. {topology.affectedNodes.length} nodes are currently affected.
       </p>
       <p id={instructionsId} className="sr-only">
         {onNodePositionChange
@@ -189,7 +205,7 @@ export const TopologyMap: React.FC<Props> = ({
       <svg
         ref={svgRef}
         viewBox="0 0 800 400"
-        className="flex-1 w-full"
+        className="flex-1 w-full min-h-0"
         preserveAspectRatio="xMidYMid meet"
         role="img"
         aria-labelledby={titleId}
@@ -413,10 +429,10 @@ export const TopologyMap: React.FC<Props> = ({
         })}
 
         {/* Nodes */}
-        {nodes.map((node) => {
-          const status = nodeStates.get(node.id) ?? node.status;
+        {topology.nodes.map((node) => {
+          const status = topology.nodeStates.get(node.id) ?? node.status;
           const isAffected = affectedNodeSet.has(node.id);
-          const connectedEdges = edges.filter(
+          const connectedEdges = topology.edges.filter(
             (edge) => edge.from === node.id || edge.to === node.id,
           ).length;
           const isKeyboardFocusable = dragging == null || dragging === node.id;

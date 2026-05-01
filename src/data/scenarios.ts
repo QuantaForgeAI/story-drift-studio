@@ -32,6 +32,14 @@ export interface TimelineEvent {
   stateDiff?: { field: string; before: string; after: string }[];
 }
 
+export interface TimelineBranch {
+  id: string;
+  label: string;
+  description?: string;
+  eventIds: string[];
+  sourceEventId?: string;
+}
+
 export interface IncidentNarrative {
   executiveSummary: string;
   technicalSummary: string;
@@ -51,6 +59,8 @@ export interface Scenario {
   edges: TopologyEdge[];
   events: TimelineEvent[];
   narrative: IncidentNarrative;
+  branches?: TimelineBranch[];
+  currentBranchId?: string;
 }
 
 export const scenarios: Scenario[] = [

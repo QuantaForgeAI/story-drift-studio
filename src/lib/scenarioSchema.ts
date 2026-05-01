@@ -48,6 +48,14 @@ const incidentNarrativeSchema = z.object({
   impactScore: z.number().finite().min(0).max(100),
 });
 
+const timelineBranchSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  description: z.string().optional(),
+  eventIds: z.array(z.string().min(1)).min(1),
+  sourceEventId: z.string().min(1).optional(),
+});
+
 const scenarioSchema = z
   .object({
     schemaVersion: z.coerce.number().int().min(1).default(SCENARIO_SCHEMA_VERSION),
@@ -60,6 +68,8 @@ const scenarioSchema = z
     edges: z.array(topologyEdgeSchema),
     events: z.array(timelineEventSchema).min(1),
     narrative: incidentNarrativeSchema,
+    branches: z.array(timelineBranchSchema).optional(),
+    currentBranchId: z.string().min(1).optional(),
   })
   .superRefine((scenario, ctx) => {
     const nodeIds = new Set<string>();
@@ -121,6 +131,41 @@ const scenarioSchema = z
         });
       }
     }
+
+    if (scenario.branches) {
+      const branchIds = new Set<string>();
+      const eventIds = new Set(scenario.events.map((event) => event.id));
+
+      for (const [index, branch] of scenario.branches.entries()) {
+        if (branchIds.has(branch.id)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: ["branches", index, "id"],
+            message: `Duplicate branch id "${branch.id}"`,
+          });
+        }
+
+        for (const [eventIndex, eventId] of branch.eventIds.entries()) {
+          if (!eventIds.has(eventId)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              path: ["branches", index, "eventIds", eventIndex],
+              message: `Unknown event id "${eventId}" in branch "${branch.id}"`,
+            });
+          }
+        }
+
+        branchIds.add(branch.id);
+      }
+
+      if (scenario.currentBranchId && !branchIds.has(scenario.currentBranchId)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["currentBranchId"],
+          message: `Unknown currentBranchId "${scenario.currentBranchId}"`,
+        });
+      }
+    }
   })
   .transform((scenario) => ({
     ...scenario,
@@ -154,11 +199,11 @@ function migrateScenarioCollectionInput(input: unknown) {
 }
 
 export function parseScenario(input: unknown): Scenario {
-  return scenarioSchema.parse(migrateScenarioInput(input)) satisfies Scenario;
+  return scenarioSchema.parse(migrateScenarioInput(input)) as Scenario;
 }
 
 export function parseScenarioCollection(input: unknown): Scenario[] {
-  return scenarioCollectionSchema.parse(migrateScenarioCollectionInput(input)) satisfies Scenario[];
+  return scenarioCollectionSchema.parse(migrateScenarioCollectionInput(input)) as Scenario[];
 }
 
 export function formatScenarioValidationError(error: unknown) {

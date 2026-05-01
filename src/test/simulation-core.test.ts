@@ -114,6 +114,39 @@ describe("simulation core", () => {
     ]);
   });
 
+  it("treats recovery events with no affected nodes as full system recovery", () => {
+    const fullRecoveryScenario: Scenario = {
+      ...scenarioFixture,
+      id: "fixture-full-recovery",
+      events: [
+        {
+          id: "evt-1",
+          timestamp: 10,
+          type: "failure",
+          severity: "critical",
+          title: "API outage",
+          description: "API went down",
+          affectedNodes: ["api"],
+        },
+        {
+          id: "evt-2",
+          timestamp: 20,
+          type: "recovery",
+          severity: "low",
+          title: "System normalized",
+          description: "Recovery completed",
+          affectedNodes: [],
+        },
+      ],
+    };
+
+    expect(Array.from(computeNodeStates(fullRecoveryScenario, 25).entries())).toEqual([
+      ["gateway", "healthy"],
+      ["api", "healthy"],
+      ["db", "healthy"],
+    ]);
+  });
+
   it("returns a deterministic timeline snapshot and next playback step", () => {
     const snapshot = getTimelineSnapshot(scenarioFixture, 55);
     expect(snapshot.currentTime).toBe(55);

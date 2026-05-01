@@ -1791,12 +1791,9 @@ const Index = () => {
       >
         {!presenterMode ? (
           <div className="grid flex-1 gap-3 xl:grid-cols-[1.7fr_1fr]">
-            <section className="relative min-h-[38rem] overflow-hidden rounded-[2rem] border border-border/60 bg-background/40 shadow-inner">
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-transparent to-cyan-500/10 pointer-events-none" />
-              <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-background/90 to-transparent pointer-events-none" />
-              <div className="absolute inset-x-0 bottom-0 h-36 bg-gradient-to-t from-background/95 via-transparent to-transparent pointer-events-none" />
+            <section className="relative min-h-[38rem] flex flex-col overflow-hidden rounded-[2rem] border border-border/60 bg-background shadow-inner">
 
-              <div className="pb-20">
+              <div className="flex-1 min-h-0 pb-20">
                 <ErrorBoundary
                   title="Topology renderer failed"
                   description="The topology visualization crashed. Retry this panel or switch scenarios to continue."
