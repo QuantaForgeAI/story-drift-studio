@@ -19,6 +19,7 @@ This repo is based on a Vite + shadcn-style React starter and includes a UI surf
 - [Example Gallery](./docs/EXAMPLE_GALLERY.md)
 - [Launch Kit](./docs/LAUNCH_KIT.md)
 - [Custom Scenario Guide](./CUSTOM_SCENARIO_GUIDE.md)
+- [Final Gap Backlog](./FINAL_GAP_BACKLOG.md)
 
 ## Example Assets
 
