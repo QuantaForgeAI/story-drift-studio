@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { TopologyNodeIcon } from "@/components/TopologyNodeIcon";
 import type { Scenario, TopologyNode, TopologyEdge, TimelineEvent, Severity } from "@/data/scenarios";
 import {
@@ -115,7 +116,10 @@ export const ScenarioBuilder: React.FC<Props> = ({ onSave, onClose }) => {
 
   const addEdge = useCallback(() => {
     if (nodes.length < 2) return;
-    setEdges((prev) => [...prev, { from: nodes[0].id, to: nodes[1].id }]);
+    setEdges((prev) => [
+      ...prev,
+      { from: nodes[0].id, to: nodes[1].id, animated: false },
+    ]);
   }, [nodes]);
 
   const updateEdge = useCallback((idx: number, patch: Partial<TopologyEdge>) => {
@@ -380,23 +384,38 @@ export const ScenarioBuilder: React.FC<Props> = ({ onSave, onClose }) => {
               </Button>
             </div>
             {edges.map((edge, i) => (
-              <div key={i} className="glass-panel-elevated p-3 flex items-center gap-2">
-                <Select value={edge.from} onValueChange={(v) => updateEdge(i, { from: v })}>
-                  <SelectTrigger className="bg-secondary/50 border-border/50 h-7 text-xs flex-1" aria-label={`Origin node for connection ${i + 1}`}><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {nodes.map((n) => <SelectItem key={n.id} value={n.id} className="text-xs">{n.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <span className="text-muted-foreground text-xs">→</span>
-                <Select value={edge.to} onValueChange={(v) => updateEdge(i, { to: v })}>
-                  <SelectTrigger className="bg-secondary/50 border-border/50 h-7 text-xs flex-1" aria-label={`Destination node for connection ${i + 1}`}><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {nodes.map((n) => <SelectItem key={n.id} value={n.id} className="text-xs">{n.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-severity-critical" onClick={() => removeEdge(i)} aria-label={`Remove connection ${i + 1}`}>
-                  <Trash2 className="h-3 w-3" />
-                </Button>
+              <div key={i} className="glass-panel-elevated p-3 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Select value={edge.from} onValueChange={(v) => updateEdge(i, { from: v })}>
+                    <SelectTrigger className="bg-secondary/50 border-border/50 h-7 text-xs flex-1" aria-label={`Origin node for connection ${i + 1}`}><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {nodes.map((n) => <SelectItem key={n.id} value={n.id} className="text-xs">{n.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <span className="text-muted-foreground text-xs">→</span>
+                  <Select value={edge.to} onValueChange={(v) => updateEdge(i, { to: v })}>
+                    <SelectTrigger className="bg-secondary/50 border-border/50 h-7 text-xs flex-1" aria-label={`Destination node for connection ${i + 1}`}><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {nodes.map((n) => <SelectItem key={n.id} value={n.id} className="text-xs">{n.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-severity-critical" onClick={() => removeEdge(i)} aria-label={`Remove connection ${i + 1}`}>
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
+                <div className="flex items-center justify-between rounded-md border border-border/50 bg-secondary/35 px-3 py-2">
+                  <div>
+                    <p className="text-xs font-medium text-foreground">Traffic animation</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      Show ambient motion on this connection during playback.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={edge.animated ?? false}
+                    onCheckedChange={(checked) => updateEdge(i, { animated: checked })}
+                    aria-label={`Toggle traffic animation for connection ${i + 1}`}
+                  />
+                </div>
               </div>
             ))}
             {edges.length === 0 && (

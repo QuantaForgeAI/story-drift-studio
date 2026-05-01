@@ -122,6 +122,261 @@ describe("accessibility regression coverage", () => {
     }
   });
 
+  it("animates healthy topology traffic when an edge is marked animated", () => {
+    const { container } = render(
+      <MotionPreferenceProvider mode="full">
+        <TopologyMap
+          nodes={[
+            {
+              id: "traffic-gateway",
+              label: "Gateway",
+              type: "gateway",
+              x: 80,
+              y: 120,
+              status: "healthy",
+            },
+            {
+              id: "traffic-api",
+              label: "API",
+              type: "service",
+              x: 240,
+              y: 120,
+              status: "healthy",
+            },
+          ]}
+          edges={[{ from: "traffic-gateway", to: "traffic-api", animated: true }]}
+          nodeStates={
+            new Map([
+              ["traffic-gateway", "healthy"],
+              ["traffic-api", "healthy"],
+            ])
+          }
+          affectedNodes={[]}
+        />
+      </MotionPreferenceProvider>,
+    );
+
+    expect(container.querySelector("animateMotion")).toBeInTheDocument();
+  });
+
+  it("animates incident propagation between degraded and affected nodes", () => {
+    const { container } = render(
+      <MotionPreferenceProvider mode="full">
+        <TopologyMap
+          nodes={[
+            {
+              id: "incident-api",
+              label: "API",
+              type: "service",
+              x: 100,
+              y: 140,
+              status: "healthy",
+            },
+            {
+              id: "incident-db",
+              label: "DB",
+              type: "database",
+              x: 260,
+              y: 140,
+              status: "healthy",
+            },
+          ]}
+          edges={[{ from: "incident-api", to: "incident-db" }]}
+          nodeStates={
+            new Map([
+              ["incident-api", "degraded"],
+              ["incident-db", "down"],
+            ])
+          }
+          affectedNodes={["incident-api", "incident-db"]}
+        />
+      </MotionPreferenceProvider>,
+    );
+
+    expect(container.querySelector("animateMotion")).toBeInTheDocument();
+    expect(
+      Array.from(container.querySelectorAll("line")).some(
+        (line) => line.getAttribute("filter") === "url(#glow-critical)",
+      ),
+    ).toBe(true);
+  });
+
+  it("renders propagation motion from the active incident event even without ambient edge animation", () => {
+    const activeEvents = [
+      {
+        id: "evt-1",
+        timestamp: 0,
+        type: "drift" as const,
+        severity: "medium" as const,
+        title: "Ingress drift",
+        description: "The gateway starts drifting.",
+        affectedNodes: ["gateway"],
+      },
+      {
+        id: "evt-2",
+        timestamp: 15,
+        type: "cascade" as const,
+        severity: "high" as const,
+        title: "Backend impact",
+        description: "The blast radius reaches the backend.",
+        affectedNodes: ["gateway", "backend"],
+      },
+    ];
+
+    const { container } = render(
+      <MotionPreferenceProvider mode="full">
+        <TopologyMap
+          nodes={[
+            {
+              id: "gateway",
+              label: "Gateway",
+              type: "gateway",
+              x: 80,
+              y: 120,
+              status: "healthy",
+            },
+            {
+              id: "backend",
+              label: "Backend",
+              type: "service",
+              x: 240,
+              y: 120,
+              status: "healthy",
+            },
+          ]}
+          edges={[{ from: "gateway", to: "backend" }]}
+          nodeStates={
+            new Map([
+              ["gateway", "healthy"],
+              ["backend", "degraded"],
+            ])
+          }
+          affectedNodes={["gateway", "backend"]}
+          activeEvents={activeEvents}
+          currentEvent={activeEvents[1]}
+        />
+      </MotionPreferenceProvider>,
+    );
+
+    expect(container.querySelector("animateMotion")).toBeInTheDocument();
+  });
+
+  it("keeps incident edge particles in system mode even when the OS prefers reduced motion", () => {
+    const originalMatchMedia = window.matchMedia;
+
+    Object.defineProperty(window, "matchMedia", {
+      writable: true,
+      value: (query: string) => ({
+        matches: query === "(prefers-reduced-motion: reduce)",
+        media: query,
+        onchange: null,
+        addListener: () => {},
+        removeListener: () => {},
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        dispatchEvent: () => false,
+      }),
+    });
+
+    try {
+      const { container } = render(
+        <TopologyMap
+          nodes={[
+            {
+              id: "system-gateway",
+              label: "Gateway",
+              type: "gateway",
+              x: 100,
+              y: 140,
+              status: "healthy",
+            },
+            {
+              id: "system-api",
+              label: "API",
+              type: "service",
+              x: 260,
+              y: 140,
+              status: "healthy",
+            },
+          ]}
+          edges={[{ from: "system-gateway", to: "system-api" }]}
+          nodeStates={
+            new Map([
+              ["system-gateway", "healthy"],
+              ["system-api", "degraded"],
+            ])
+          }
+          affectedNodes={["system-api"]}
+        />,
+      );
+
+      expect(container.querySelectorAll("animateMotion").length).toBeGreaterThanOrEqual(2);
+    } finally {
+      Object.defineProperty(window, "matchMedia", {
+        writable: true,
+        value: originalMatchMedia,
+      });
+    }
+  });
+
+  it("suppresses ambient healthy traffic while incident edges are active", () => {
+    const { container } = render(
+      <MotionPreferenceProvider mode="full">
+        <TopologyMap
+          nodes={[
+            {
+              id: "gateway",
+              label: "Gateway",
+              type: "gateway",
+              x: 80,
+              y: 120,
+              status: "healthy",
+            },
+            {
+              id: "api",
+              label: "API",
+              type: "service",
+              x: 240,
+              y: 120,
+              status: "healthy",
+            },
+            {
+              id: "worker",
+              label: "Worker",
+              type: "service",
+              x: 400,
+              y: 120,
+              status: "healthy",
+            },
+          ]}
+          edges={[
+            { from: "gateway", to: "api" },
+            { from: "api", to: "worker", animated: true },
+          ]}
+          nodeStates={
+            new Map([
+              ["gateway", "healthy"],
+              ["api", "degraded"],
+              ["worker", "healthy"],
+            ])
+          }
+          affectedNodes={["api"]}
+        />
+      </MotionPreferenceProvider>,
+    );
+
+    const healthyAnimatedEdge = Array.from(container.querySelectorAll("line")).find(
+      (line) =>
+        line.getAttribute("class")?.includes("stroke-primary/35") &&
+        Array.from(line.querySelectorAll("animate")).some(
+          (animate) => animate.getAttribute("attributeName") === "stroke-dashoffset",
+        ),
+    );
+
+    expect(healthyAnimatedEdge).toBeUndefined();
+    expect(container.querySelectorAll("animateMotion").length).toBeGreaterThanOrEqual(2);
+  });
+
   it("supports keyboard repositioning for editable topology nodes", () => {
     const onNodePositionChange = vi.fn();
 

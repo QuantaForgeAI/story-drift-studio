@@ -1,13 +1,15 @@
 import React, { useMemo } from "react";
-import type { TopologyNode, TopologyEdge } from "@/data/scenarios";
+import type { TimelineEvent, TopologyNode, TopologyEdge } from "@/data/scenarios";
 import { TopologyNodeIcon } from "@/components/TopologyNodeIcon";
-import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
+import { useMotionMode, usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 
 interface Props {
   nodes: TopologyNode[];
   edges: TopologyEdge[];
   nodeStates: Map<string, TopologyNode["status"]>;
   affectedNodes: string[];
+  activeEvents?: TimelineEvent[];
+  currentEvent?: TimelineEvent | null;
   onNodePositionChange?: (id: string, x: number, y: number) => void;
 }
 
@@ -25,21 +27,45 @@ const statusFillColors: Record<TopologyNode["status"], string> = {
   unknown: "fill-muted/20",
 };
 
-export const TopologyMap: React.FC<Props> = ({ nodes, edges, nodeStates, affectedNodes, onNodePositionChange }) => {
+export const TopologyMap: React.FC<Props> = ({
+  nodes,
+  edges,
+  nodeStates,
+  affectedNodes,
+  onNodePositionChange,
+}) => {
   const nodeMap = useMemo(() => new Map(nodes.map((n) => [n.id, n])), [nodes]);
   const svgRef = React.useRef<SVGSVGElement>(null);
   const [dragging, setDragging] = React.useState<string | null>(null);
   const [focusedNodeId, setFocusedNodeId] = React.useState<string | null>(null);
+  const motionMode = useMotionMode();
   const prefersReducedMotion = usePrefersReducedMotion();
-  const titleId = "system-topology-title";
-  const summaryId = "system-topology-summary";
-  const instructionsId = "system-topology-instructions";
+  const topologyId = React.useId().replace(/:/g, "");
+  const titleId = `${topologyId}-system-topology-title`;
+  const summaryId = `${topologyId}-system-topology-summary`;
+  const instructionsId = `${topologyId}-system-topology-instructions`;
+  const affectedNodeSet = React.useMemo(() => new Set(affectedNodes), [affectedNodes]);
+  const hasIncidentActivity = React.useMemo(() => {
+    if (affectedNodeSet.size > 0) {
+      return true;
+    }
+
+    for (const status of nodeStates.values()) {
+      if (status === "degraded" || status === "down") {
+        return true;
+      }
+    }
+
+    return false;
+  }, [affectedNodeSet, nodeStates]);
   const criticalPulse = prefersReducedMotion
     ? { duration: "4s", opacity: "0.2;0.36;0.2" }
     : { duration: "2s", radius: "28;36;28", opacity: "0.5;0.2;0.5" };
   const degradedPulse = prefersReducedMotion
     ? { duration: "5s", opacity: "0.16;0.28;0.16" }
     : { duration: "3s", radius: "26;32;26", opacity: "0.4;0.15;0.4" };
+  const allowIncidentEdgeMotion = motionMode !== "reduced";
+  const allowAmbientEdgeMotion = !prefersReducedMotion;
 
   // Convert screen coordinates to SVG coordinates
   const screenToSvg = React.useCallback((clientX: number, clientY: number): { x: number; y: number } | null => {
@@ -128,14 +154,15 @@ export const TopologyMap: React.FC<Props> = ({ nodes, edges, nodeStates, affecte
     }
   }, [dragging, handleMouseMove, handleMouseUp, handleTouchMove, handleTouchEnd]);
 
-  // Compute which edges are "propagating" (both endpoints not healthy, at least one down/degraded)
+  // Match the reference topology behavior: animate any edge touching degraded/down nodes.
   const edgePropagation = useMemo(() => {
     return edges.map((edge) => {
       const fromStatus = nodeStates.get(edge.from) ?? "healthy";
       const toStatus = nodeStates.get(edge.to) ?? "healthy";
       const isAffected = fromStatus === "down" || toStatus === "down";
       const isDegraded = fromStatus === "degraded" || toStatus === "degraded";
-      return { edge, isAffected, isDegraded };
+      const hasAnimatedTraffic = edge.animated === true;
+      return { edge, hasAnimatedTraffic, isAffected, isDegraded };
     });
   }, [edges, nodeStates]);
 
@@ -203,22 +230,29 @@ export const TopologyMap: React.FC<Props> = ({ nodes, edges, nodeStates, affecte
         </defs>
 
         {/* Edges */}
-        {edgePropagation.map(({ edge, isAffected, isDegraded }, i) => {
+        {edgePropagation.map(({ edge, hasAnimatedTraffic, isAffected, isDegraded }, i) => {
           const from = nodeMap.get(edge.from);
           const to = nodeMap.get(edge.to);
           if (!from || !to) return null;
 
-          const pathId = `edge-path-${i}`;
-          const dx = to.x - from.x;
-          const dy = to.y - from.y;
-          const len = Math.sqrt(dx * dx + dy * dy);
+          const pathId = `${topologyId}-edge-path-${i}`;
+          const motionPath = `M${from.x},${from.y} L${to.x},${to.y}`;
+          const showCriticalTraffic = isAffected && allowIncidentEdgeMotion;
+          const showDegradedTraffic =
+            isDegraded && !isAffected && allowIncidentEdgeMotion;
+          const showHealthyTraffic =
+            hasAnimatedTraffic &&
+            !hasIncidentActivity &&
+            !isAffected &&
+            !isDegraded &&
+            allowAmbientEdgeMotion;
 
           return (
-            <g key={i}>
+            <g key={`${edge.from}-${edge.to}-${i}`}>
               {/* Define path for particle motion */}
               <path
                 id={pathId}
-                d={`M${from.x},${from.y} L${to.x},${to.y}`}
+                d={motionPath}
                 fill="none"
                 className="pointer-events-none"
                 stroke="none"
@@ -235,30 +269,59 @@ export const TopologyMap: React.FC<Props> = ({ nodes, edges, nodeStates, affecte
                     ? "stroke-severity-critical/40"
                     : isDegraded
                     ? "stroke-severity-medium/30"
+                    : hasAnimatedTraffic
+                    ? "stroke-primary/35"
                     : "stroke-topology-line/50"
                 }
-                strokeWidth={isAffected ? 2 : 1}
-                strokeDasharray={isAffected ? "6 3" : undefined}
-                filter={isAffected ? "url(#glow)" : undefined}
+                strokeWidth={isAffected ? 2 : hasAnimatedTraffic ? 1.6 : 1}
+                strokeDasharray={isAffected ? "6 3" : hasAnimatedTraffic ? "8 10" : undefined}
+                filter={isAffected || hasAnimatedTraffic ? "url(#glow)" : undefined}
               >
-                {isAffected && !prefersReducedMotion && (
+                {showCriticalTraffic ? (
                   <animate attributeName="stroke-dashoffset" from="0" to="-18" dur="1s" repeatCount="indefinite" />
-                )}
+                ) : null}
+                {showHealthyTraffic ? (
+                  <animate
+                    attributeName="stroke-dashoffset"
+                    from="36"
+                    to="0"
+                    dur="1.8s"
+                    repeatCount="indefinite"
+                  />
+                ) : null}
               </line>
-
-              {/* Propagation particles - multiple particles per affected edge */}
-              {isAffected && !prefersReducedMotion && (
+              {showCriticalTraffic ? (
                 <>
-                  {[0, 1, 2].map((pi) => (
-                    <circle key={pi} r="4" fill="url(#particle-critical)" filter="url(#particle-glow)">
-                      <animateMotion dur={`${1.2 + pi * 0.4}s`} repeatCount="indefinite" begin={`${pi * 0.4}s`}>
-                        <mpath xlinkHref={`#${pathId}`} />
+                  {[0, 1, 2].map((particleIndex) => (
+                    <circle
+                      key={particleIndex}
+                      r="4"
+                      fill="url(#particle-critical)"
+                      filter="url(#particle-glow)"
+                    >
+                      <animateMotion
+                        dur={`${1.2 + particleIndex * 0.4}s`}
+                        repeatCount="indefinite"
+                        begin={`${particleIndex * 0.4}s`}
+                      >
+                        <mpath href={`#${pathId}`} xlinkHref={`#${pathId}`} />
                       </animateMotion>
-                      <animate attributeName="r" values="2;5;2" dur={`${1.2 + pi * 0.4}s`} repeatCount="indefinite" begin={`${pi * 0.4}s`} />
-                      <animate attributeName="opacity" values="0.3;1;0.3" dur={`${1.2 + pi * 0.4}s`} repeatCount="indefinite" begin={`${pi * 0.4}s`} />
+                      <animate
+                        attributeName="r"
+                        values="2;5;2"
+                        dur={`${1.2 + particleIndex * 0.4}s`}
+                        repeatCount="indefinite"
+                        begin={`${particleIndex * 0.4}s`}
+                      />
+                      <animate
+                        attributeName="opacity"
+                        values="0.3;1;0.3"
+                        dur={`${1.2 + particleIndex * 0.4}s`}
+                        repeatCount="indefinite"
+                        begin={`${particleIndex * 0.4}s`}
+                      />
                     </circle>
                   ))}
-                  {/* Glowing trail overlay */}
                   <line
                     x1={from.x}
                     y1={from.y}
@@ -268,19 +331,79 @@ export const TopologyMap: React.FC<Props> = ({ nodes, edges, nodeStates, affecte
                     strokeWidth={6}
                     filter="url(#glow-critical)"
                   >
-                    <animate attributeName="opacity" values="0.1;0.3;0.1" dur="2s" repeatCount="indefinite" />
+                    <animate
+                      attributeName="opacity"
+                      values="0.1;0.3;0.1"
+                      dur="2s"
+                      repeatCount="indefinite"
+                    />
                   </line>
                 </>
-              )}
-              {isDegraded && !isAffected && !prefersReducedMotion && (
+              ) : null}
+              {showDegradedTraffic ? (
+                <>
+                  {[0, 1].map((particleIndex) => (
+                    <circle
+                      key={particleIndex}
+                      r="3"
+                      fill="url(#particle-degraded)"
+                      filter="url(#particle-glow)"
+                    >
+                      <animateMotion
+                        dur={`${2 + particleIndex * 0.6}s`}
+                        repeatCount="indefinite"
+                        begin={`${particleIndex * 0.5}s`}
+                      >
+                        <mpath href={`#${pathId}`} xlinkHref={`#${pathId}`} />
+                      </animateMotion>
+                      <animate
+                        attributeName="r"
+                        values="1.5;3.5;1.5"
+                        dur={`${2 + particleIndex * 0.6}s`}
+                        repeatCount="indefinite"
+                        begin={`${particleIndex * 0.5}s`}
+                      />
+                      <animate
+                        attributeName="opacity"
+                        values="0.2;0.8;0.2"
+                        dur={`${2 + particleIndex * 0.6}s`}
+                        repeatCount="indefinite"
+                        begin={`${particleIndex * 0.5}s`}
+                      />
+                    </circle>
+                  ))}
+                </>
+              ) : null}
+              {showHealthyTraffic && (
                 <>
                   {[0, 1].map((pi) => (
-                    <circle key={pi} r="3" fill="url(#particle-degraded)" filter="url(#particle-glow)">
-                      <animateMotion dur={`${2 + pi * 0.6}s`} repeatCount="indefinite" begin={`${pi * 0.5}s`}>
-                        <mpath xlinkHref={`#${pathId}`} />
+                    <circle
+                      key={pi}
+                      r="2.5"
+                      className="fill-primary/80"
+                      filter="url(#particle-glow)"
+                    >
+                      <animateMotion
+                        dur={`${2.4 + pi * 0.5}s`}
+                        repeatCount="indefinite"
+                        begin={`${pi * 0.55}s`}
+                      >
+                        <mpath href={`#${pathId}`} xlinkHref={`#${pathId}`} />
                       </animateMotion>
-                      <animate attributeName="r" values="1.5;3.5;1.5" dur={`${2 + pi * 0.6}s`} repeatCount="indefinite" begin={`${pi * 0.5}s`} />
-                      <animate attributeName="opacity" values="0.2;0.8;0.2" dur={`${2 + pi * 0.6}s`} repeatCount="indefinite" begin={`${pi * 0.5}s`} />
+                      <animate
+                        attributeName="r"
+                        values="1.5;3;1.5"
+                        dur={`${2.4 + pi * 0.5}s`}
+                        repeatCount="indefinite"
+                        begin={`${pi * 0.55}s`}
+                      />
+                      <animate
+                        attributeName="opacity"
+                        values="0.15;0.9;0.15"
+                        dur={`${2.4 + pi * 0.5}s`}
+                        repeatCount="indefinite"
+                        begin={`${pi * 0.55}s`}
+                      />
                     </circle>
                   ))}
                 </>
@@ -292,7 +415,7 @@ export const TopologyMap: React.FC<Props> = ({ nodes, edges, nodeStates, affecte
         {/* Nodes */}
         {nodes.map((node) => {
           const status = nodeStates.get(node.id) ?? node.status;
-          const isAffected = affectedNodes.includes(node.id);
+          const isAffected = affectedNodeSet.has(node.id);
           const connectedEdges = edges.filter(
             (edge) => edge.from === node.id || edge.to === node.id,
           ).length;

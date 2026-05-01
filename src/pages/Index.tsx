@@ -1,6 +1,6 @@
 import React from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { Network, Plus, Download, Upload, Share2 } from "lucide-react";
+import { Activity, ListChecks, Monitor, Network, Plus, Download, Upload, Share2, ShieldCheck } from "lucide-react";
 import { scenarios as builtInScenarios } from "@/data/scenarios";
 import type { Scenario } from "@/data/scenarios";
 import { TopologyMap } from "@/components/TopologyMap";
@@ -8,7 +8,6 @@ import { TimelinePanel } from "@/components/TimelinePanel";
 import { NarrativePanel } from "@/components/NarrativePanel";
 import { ScenarioSelector } from "@/components/ScenarioSelector";
 import { WorkspaceProfileMenu } from "@/components/WorkspaceProfileMenu";
-import { ScenarioWorkspacePanel } from "@/components/ScenarioWorkspacePanel";
 import { StatusBar } from "@/components/StatusBar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Button } from "@/components/ui/button";
@@ -51,17 +50,12 @@ import {
   getPublishedScenarioVersion,
   getScenarioVersionByRevision,
 } from "@/lib/scenarioWorkspace";
+import { selectRecentObservabilityLogs } from "@/lib/observabilityLogView";
 
 const LazyScenarioBuilder = React.lazy(async () => {
   const module = await import("@/components/ScenarioBuilder");
 
   return { default: module.ScenarioBuilder };
-});
-
-const LazyScenarioPresentationPanel = React.lazy(async () => {
-  const module = await import("@/components/ScenarioPresentationPanel");
-
-  return { default: module.ScenarioPresentationPanel };
 });
 
 const LazyScenarioConflictDialog = React.lazy(async () => {
@@ -105,6 +99,8 @@ function isShortcutInputTarget(target: EventTarget | null) {
     target.isContentEditable
   );
 }
+
+type WorkspaceMode = "timeline" | "observability" | "rootCause";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -165,6 +161,8 @@ const Index = () => {
     presentationPreset.bookmarkId,
   );
   const [isShortcutDialogOpen, setIsShortcutDialogOpen] = React.useState(false);
+  const [showScenarioDialog, setShowScenarioDialog] = React.useState(false);
+  const [workspaceMode, setWorkspaceMode] = React.useState<WorkspaceMode>("timeline");
   const appliedPresentationPresetRef = React.useRef<string | null>(null);
 
   const sharedScenarioResult = React.useMemo(() => {
@@ -729,6 +727,44 @@ const Index = () => {
   const affectedNodes = currentEvent?.affectedNodes ?? [];
   const progress = scenario.duration > 0 ? currentTime / scenario.duration : 0;
   const activeMetadata = metadataByScenarioId.get(scenario.id);
+
+  const eventCounts = React.useMemo(
+    () =>
+      scenario.events.reduce(
+        (counts, event) => {
+          counts[event.severity] = (counts[event.severity] ?? 0) + 1;
+          return counts;
+        },
+        {
+          critical: 0,
+          high: 0,
+          medium: 0,
+          low: 0,
+          info: 0,
+        } as Record<string, number>,
+      ),
+    [scenario.events],
+  );
+
+  const unstableNodes = React.useMemo(
+    () => scenario.nodes.filter((node) => node.status !== "healthy").length,
+    [scenario.nodes],
+  );
+
+  const upcomingEvent = React.useMemo(
+    () => scenario.events.find((event) => event.timestamp > currentTime) ?? null,
+    [scenario.events, currentTime],
+  );
+
+  const recentLogs = React.useMemo(
+    () => selectRecentObservabilityLogs(systemLogs),
+    [systemLogs],
+  );
+
+  const recentAudits = React.useMemo(
+    () => auditLog.slice(0, 3),
+    [auditLog],
+  );
 
   const handleScenarioSelection = (scenarioId: string) => {
     setActiveScenarioId(scenarioId);
@@ -1616,169 +1652,154 @@ const Index = () => {
           scenarioName={scenario.name}
           presentationMode={presenterMode}
         />
-        <React.Suspense
-          fallback={(
-            <section className="glass-panel border-border/60 p-4" aria-hidden="true">
-              <div className="h-24 animate-pulse rounded-xl bg-secondary/30" />
-            </section>
-          )}
-        >
-          <LazyScenarioPresentationPanel
-            scenario={scenario}
-            currentTime={timeline.currentTime}
-            bookmarks={presentationBookmarks}
-            selectedBookmarkId={selectedPresentationBookmark?.id ?? null}
-            presenterMode={presenterMode}
-            focusPanel={presentationFocus}
-            showSpeakerNotes={showSpeakerNotes}
-            onSelectBookmark={handleSelectPresentationBookmark}
-            onTogglePresenterMode={handleTogglePresenterMode}
-            onFocusChange={handlePresentationFocusChange}
-            onToggleSpeakerNotes={handleToggleSpeakerNotes}
-            onCopyShareLink={handleCopyScenarioLink}
-            onOpenShortcuts={() => setIsShortcutDialogOpen(true)}
-          />
-        </React.Suspense>
+
+        {!presenterMode ? (
+          <div className="glass-panel grid gap-4 p-4 xl:grid-cols-[1.7fr_18rem]">
+            <div className="space-y-4">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0">
+                  <p className="text-[10px] uppercase tracking-[0.35em] text-muted-foreground">
+                    Active scenario
+                  </p>
+                  <h2 className="mt-2 text-2xl font-semibold tracking-tight text-foreground">
+                    {scenario.name}
+                  </h2>
+                  <p className="mt-3 text-sm leading-6 text-foreground/75">
+                    {scenario.narrative.executiveSummary}
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="h-9 gap-2"
+                    onClick={() => setShowScenarioDialog(true)}
+                  >
+                    <ListChecks className="h-4 w-4" />
+                    Scenario library
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="h-9 gap-2"
+                    onClick={() => setShowBuilder(true)}
+                    disabled={!canCreateScenario}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Build scenario
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-3xl border border-border/60 bg-background/80 p-4">
+                  <p className="text-[10px] uppercase tracking-[0.35em] text-muted-foreground">
+                    Topology
+                  </p>
+                  <p className="mt-3 text-2xl font-semibold text-foreground">{scenario.nodes.length}</p>
+                  <p className="mt-2 text-sm text-foreground/70">Nodes in the incident</p>
+                </div>
+                <div className="rounded-3xl border border-border/60 bg-background/80 p-4">
+                  <p className="text-[10px] uppercase tracking-[0.35em] text-muted-foreground">Events</p>
+                  <p className="mt-3 text-2xl font-semibold text-foreground">{scenario.events.length}</p>
+                  <p className="mt-2 text-sm text-foreground/70">Total replay steps</p>
+                </div>
+                <div className="rounded-3xl border border-border/60 bg-background/80 p-4">
+                  <p className="text-[10px] uppercase tracking-[0.35em] text-muted-foreground">
+                    Stability
+                  </p>
+                  <p className="mt-3 text-2xl font-semibold text-foreground">{unstableNodes}</p>
+                  <p className="mt-2 text-sm text-foreground/70">Nodes outside healthy state</p>
+                </div>
+              </div>
+            </div>
+
+            <aside className="rounded-3xl border border-border/60 bg-background/80 p-4">
+              <p className="text-[10px] uppercase tracking-[0.35em] text-muted-foreground">
+                Simulator mode
+              </p>
+              <div className="mt-4 grid gap-2">
+                {([
+                  {
+                    mode: "timeline" as const,
+                    label: "Timeline",
+                    icon: Activity,
+                    description: "Follow the replay and inspect active events.",
+                  },
+                  {
+                    mode: "observability" as const,
+                    label: "Observability",
+                    icon: Monitor,
+                    description: "Review logs, node health, and system trends.",
+                  },
+                  {
+                    mode: "rootCause" as const,
+                    label: "Root cause",
+                    icon: ShieldCheck,
+                    description: "Focus on failure analysis and remediation.",
+                  },
+                ]).map((item) => (
+                  <button
+                    key={item.mode}
+                    type="button"
+                    onClick={() => setWorkspaceMode(item.mode)}
+                    className={`group flex items-center gap-3 rounded-2xl border px-3 py-3 text-left transition-all ${
+                      workspaceMode === item.mode
+                        ? "border-primary bg-primary/10 text-foreground shadow-sm"
+                        : "border-border/60 bg-background hover:border-primary/40"
+                    }`}
+                  >
+                    <item.icon className="h-4 w-4 text-primary" />
+                    <div className="min-w-0">
+                      <p className="font-semibold text-sm">{item.label}</p>
+                      <p className="text-xs text-muted-foreground">{item.description}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </aside>
+          </div>
+        ) : null}
       </div>
+
+      <Dialog open={showScenarioDialog} onOpenChange={setShowScenarioDialog}>
+        <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Choose a scenario</DialogTitle>
+            <DialogDescription>
+              Select the active incident and switch to a different replay workspace.
+            </DialogDescription>
+          </DialogHeader>
+          <ScenarioSelector
+            scenarios={scenarios}
+            activeId={activeScenarioId}
+            onSelect={(scenarioId) => {
+              setShowScenarioDialog(false);
+              handleScenarioSelection(scenarioId);
+            }}
+            onDelete={canDeleteScenario ? handleDeleteScenario : undefined}
+            customScenarioIds={customEntries.map((entry) => entry.scenarioId)}
+            metadataByScenarioId={metadataByScenarioId}
+          />
+        </DialogContent>
+      </Dialog>
 
       <main
         id="simulator-main"
         tabIndex={-1}
-        className={
-          presenterMode
-            ? "flex-1 min-h-0 p-4 pt-0"
-            : "flex-1 flex gap-3 p-4 min-h-0"
-        }
+        className="flex-1 flex flex-col gap-3 p-4 min-h-0"
       >
         {!presenterMode ? (
-          <aside
-            className="w-72 flex-shrink-0 overflow-y-auto scrollbar-thin flex flex-col"
-            aria-label="Scenario selection and workspace tools"
-          >
-            <ErrorBoundary
-              title="Scenario workspace failed"
-              description="The scenario list hit an unexpected error. Retry this panel to recover your workspace."
-              resetKeys={[activeScenarioId, scenarios.length]}
-            >
-              <ScenarioSelector
-                scenarios={scenarios}
-                activeId={activeScenarioId}
-                onSelect={handleScenarioSelection}
-                onDelete={canDeleteScenario ? handleDeleteScenario : undefined}
-                customScenarioIds={customEntries.map((entry) => entry.scenarioId)}
-                metadataByScenarioId={metadataByScenarioId}
-              />
-              <Button
-                variant="ghost"
-                className="mt-3 w-full text-xs gap-1.5 border border-dashed border-border/50 hover:border-primary/40 hover:bg-primary/5 text-muted-foreground hover:text-primary transition-all"
-                onClick={() => setShowBuilder(true)}
-                disabled={!canCreateScenario}
-                title={
-                  canCreateScenario
-                    ? "Build a custom scenario"
-                    : `${membership.role} access cannot create scenarios`
-                }
-              >
-                <Plus className="h-3.5 w-3.5" />
-                {canCreateScenario ? "Build Custom Scenario" : "Create Disabled"}
-              </Button>
-              <ScenarioWorkspacePanel
-                entry={activeEntry}
-                scenarioName={scenario.name}
-                selectedRevision={selectedRevision}
-                auditLog={auditLog}
-                replaySnapshots={snapshotsByScenarioId.get(scenario.id) ?? []}
-                snapshotCount={activeMetadata?.snapshotCount ?? 0}
-                latestSnapshotAt={activeMetadata?.latestSnapshotAt ?? null}
-                lastSyncedAt={lastSyncedAt}
-                onSelectLatest={() => handleRevisionSelection(null)}
-                onSelectRevision={handleRevisionSelection}
-                onCopyLink={handleCopyScenarioLink}
-                canCopyLink={canShareScenario}
-                onPublishRevision={
-                  activeEntry?.origin === "custom" && canPublishScenario
-                    ? handlePublishRevision
-                    : undefined
-                }
-              />
-            </ErrorBoundary>
-          </aside>
-        ) : null}
+          <div className="grid flex-1 gap-3 xl:grid-cols-[1.7fr_1fr]">
+            <section className="relative min-h-[38rem] overflow-hidden rounded-[2rem] border border-border/60 bg-background/40 shadow-inner">
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-transparent to-cyan-500/10 pointer-events-none" />
+              <div className="absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-background/90 to-transparent pointer-events-none" />
+              <div className="absolute inset-x-0 bottom-0 h-36 bg-gradient-to-t from-background/95 via-transparent to-transparent pointer-events-none" />
 
-        {showBuilder ? (
-          <Dialog open={showBuilder} onOpenChange={setShowBuilder}>
-            <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Build Custom Scenario</DialogTitle>
-                <DialogDescription>
-                  Create a custom incident scenario, define topology nodes and edges, and add the replay timeline before saving it into the active workspace.
-                </DialogDescription>
-              </DialogHeader>
-              <React.Suspense
-                fallback={(
-                  <div className="py-10 text-sm text-muted-foreground">
-                    Loading the scenario builder workspace...
-                  </div>
-                )}
-              >
-                <LazyScenarioBuilder onSave={handleSaveScenario} onClose={() => setShowBuilder(false)} />
-              </React.Suspense>
-            </DialogContent>
-          </Dialog>
-        ) : null}
-
-        {saveConflict ? (
-          <React.Suspense fallback={null}>
-            <LazyScenarioConflictDialog
-              conflict={saveConflict}
-              open={saveConflict != null}
-              onOpenChange={(open) => {
-                if (!open) {
-                  setSaveConflict(null);
-                }
-              }}
-              onReviewLatest={handleReviewLatestConflict}
-              onSaveRecoveryRevision={handleSaveRecoveryRevision}
-            />
-          </React.Suspense>
-        ) : null}
-
-        {showExportDialog ? (
-          <React.Suspense fallback={null}>
-            <LazyScenarioExportDialog
-              open={showExportDialog}
-              onOpenChange={setShowExportDialog}
-              scenarioName={scenario.name}
-              canSharePlaybackLink={canShareScenario}
-              busyKind={exportBusyKind}
-              onSelect={(kind) => {
-                if (kind === "scenario-json") {
-                  void handleExportScenario();
-                  return;
-                }
-
-                void handleRichExport(kind);
-              }}
-            />
-          </React.Suspense>
-        ) : null}
-
-        {isShortcutDialogOpen ? (
-          <React.Suspense fallback={null}>
-            <LazyScenarioShortcutDialog
-              open={isShortcutDialogOpen}
-              onOpenChange={setIsShortcutDialogOpen}
-            />
-          </React.Suspense>
-        ) : null}
-
-        {!presenterMode ? (
-          <>
-            <div className="flex-1 flex flex-col gap-3 min-w-0" aria-label="Topology and timeline workspace">
-              <div className="flex-1 min-h-0">
+              <div className="pb-20">
                 <ErrorBoundary
                   title="Topology renderer failed"
-                  description="The topology visualization crashed. Retry the panel or switch scenarios to continue."
+                  description="The topology visualization crashed. Retry this panel or switch scenarios to continue."
                   resetKeys={[scenario.id, scenario.nodes.length, selectedRevision]}
                 >
                   <TopologyMap
@@ -1794,44 +1815,125 @@ const Index = () => {
                   />
                 </ErrorBoundary>
               </div>
-              <div className="h-[320px] flex-shrink-0">
-                <ErrorBoundary
-                  title="Timeline panel failed"
-                  description="The playback controls encountered an error. Retry the panel to resume the simulation."
-                  resetKeys={[scenario.id, timeline.currentTime, selectedRevision]}
-                >
-                  <TimelinePanel
-                    scenario={scenario}
-                    currentTime={timeline.currentTime}
-                    isPlaying={timeline.isPlaying}
-                    speed={timeline.speed}
-                    activeEvents={timeline.activeEvents}
-                    onPlay={timeline.play}
-                    onPause={timeline.pause}
-                    onSeek={timeline.seek}
-                    onSpeedChange={timeline.setSpeed}
-                    onReset={timeline.reset}
-                    onPreviousEvent={handleJumpToPreviousEvent}
-                    onNextEvent={handleJumpToNextEvent}
-                  />
-                </ErrorBoundary>
-              </div>
-            </div>
 
-            <aside className="w-80 flex-shrink-0" aria-label="Incident narrative">
-              <ErrorBoundary
-                title="Narrative panel failed"
-                description="The incident narrative could not be rendered. Retry the panel to continue reviewing the scenario."
-                resetKeys={[scenario.id, timeline.currentTime, selectedRevision]}
-              >
-                <NarrativePanel
-                  narrative={scenario.narrative}
-                  severity={scenario.severity}
-                  progress={progress}
-                />
-              </ErrorBoundary>
-            </aside>
-          </>
+              <div className="absolute left-6 right-6 bottom-6 rounded-3xl border border-border/60 bg-background/85 p-4 shadow-xl backdrop-blur-sm">
+                <p className="text-[10px] uppercase tracking-[0.35em] text-muted-foreground">
+                  Live replay briefing
+                </p>
+                <p className="mt-2 text-sm leading-6 text-foreground/85">
+                  {upcomingEvent
+                    ? `Next event in ${Math.max(0, upcomingEvent.timestamp - currentTime)}s: ${upcomingEvent.title}`
+                    : "Incident replay has reached the final state."}
+                </p>
+              </div>
+            </section>
+
+            <div className="flex flex-col gap-3">
+              <TimelinePanel
+                scenario={scenario}
+                currentTime={timeline.currentTime}
+                isPlaying={timeline.isPlaying}
+                speed={timeline.speed}
+                activeEvents={timeline.activeEvents}
+                onPlay={timeline.play}
+                onPause={timeline.pause}
+                onSeek={timeline.seek}
+                onSpeedChange={timeline.setSpeed}
+                onReset={timeline.reset}
+                onPreviousEvent={handleJumpToPreviousEvent}
+                onNextEvent={handleJumpToNextEvent}
+              />
+
+              {workspaceMode === "timeline" && (
+                <section className="glass-panel flex flex-col gap-4 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.35em] text-muted-foreground">Timeline mode</p>
+                      <h3 className="mt-2 text-lg font-semibold text-foreground">Incident pulse</h3>
+                    </div>
+                    <span className="rounded-full bg-primary/10 px-3 py-1 text-[10px] font-mono uppercase tracking-[0.35em] text-primary">
+                      {Math.round(progress * 100)}%
+                    </span>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-2xl border border-border/60 bg-background/80 p-3">
+                      <p className="text-[10px] uppercase tracking-[0.35em] text-muted-foreground">Triggered</p>
+                      <p className="mt-2 text-2xl font-semibold text-foreground">{activeEvents.length}</p>
+                      <p className="mt-1 text-xs text-foreground/70">active events</p>
+                    </div>
+                    <div className="rounded-2xl border border-border/60 bg-background/80 p-3">
+                      <p className="text-[10px] uppercase tracking-[0.35em] text-muted-foreground">Remaining</p>
+                      <p className="mt-2 text-2xl font-semibold text-foreground">{scenario.events.length - activeEvents.length}</p>
+                      <p className="mt-1 text-xs text-foreground/70">events ahead</p>
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {workspaceMode === "observability" && (
+                <section className="glass-panel flex flex-col gap-4 p-4">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.35em] text-muted-foreground">Observability mode</p>
+                    <h3 className="mt-2 text-lg font-semibold text-foreground">System health</h3>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-2xl border border-border/60 bg-background/80 p-3">
+                      <p className="text-[10px] uppercase tracking-[0.35em] text-muted-foreground">Healthy nodes</p>
+                      <p className="mt-2 text-2xl font-semibold text-foreground">{scenario.nodes.length - unstableNodes}</p>
+                      <p className="mt-1 text-xs text-foreground/70">online</p>
+                    </div>
+                    <div className="rounded-2xl border border-border/60 bg-background/80 p-3">
+                      <p className="text-[10px] uppercase tracking-[0.35em] text-muted-foreground">Critical alerts</p>
+                      <p className="mt-2 text-2xl font-semibold text-severity-critical">{eventCounts.critical}</p>
+                      <p className="mt-1 text-xs text-foreground/70">highest severity</p>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-[0.35em] text-muted-foreground">Recent logs</p>
+                    </div>
+                    {recentLogs.length > 0 ? (
+                      <ul className="space-y-2">
+                        {recentLogs.map((log) => (
+                          <li key={log.id} className="rounded-2xl border border-border/60 bg-background/80 p-3 text-sm text-foreground/80">
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="font-mono text-[10px] uppercase tracking-[0.35em] text-muted-foreground">{log.level}</span>
+                              <span className="text-[10px] text-muted-foreground">{log.category}</span>
+                            </div>
+                            <p className="mt-2 leading-relaxed">{log.message}</p>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No recent observability signals are available.</p>
+                    )}
+                  </div>
+                </section>
+              )}
+
+              {workspaceMode === "rootCause" && (
+                <div className="flex flex-col gap-4">
+                  <section className="glass-panel p-4">
+                    <p className="text-[10px] uppercase tracking-[0.35em] text-muted-foreground">Root cause mode</p>
+                    <h3 className="mt-2 text-lg font-semibold text-foreground">Failure analysis</h3>
+                    <p className="mt-3 text-sm leading-6 text-foreground/75">{scenario.narrative.rootCause}</p>
+                  </section>
+                  <ErrorBoundary
+                    title="Narrative panel failed"
+                    description="The incident narrative could not be rendered. Retry the panel to continue reviewing the scenario."
+                    resetKeys={[scenario.id, timeline.currentTime, selectedRevision]}
+                  >
+                    <NarrativePanel
+                      narrative={scenario.narrative}
+                      severity={scenario.severity}
+                      progress={progress}
+                      presentationMode
+                    />
+                  </ErrorBoundary>
+                </div>
+              )}
+            </div>
+          </div>
         ) : (
           <div className="flex h-full min-h-0 flex-1 flex-col gap-3" aria-label="Presenter workspace">
             {presentationFocus === "split" ? (
