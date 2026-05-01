@@ -3,7 +3,6 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -14,7 +13,6 @@ import {
 } from "@/lib/scenarioAuth";
 import type {
   OrganizationMembershipRole,
-  ScenarioBackendAuthSession,
   ScenarioBackendMembership,
   ScenarioBackendUser,
 } from "@/lib/scenarioBackendModels";
@@ -31,15 +29,8 @@ interface WorkspaceAccessDialogProps {
   organizationName: string;
   viewer: ScenarioBackendUser;
   role: OrganizationMembershipRole;
-  authSession: ScenarioBackendAuthSession;
   permissions: ScenarioWorkspacePermission[];
   availableAccessProfiles: AccessProfile[];
-  storageStrategy: {
-    kind: "tenant-local-storage";
-    controlPlaneKey: string;
-    tenantStorageKey: string;
-    isolationBoundary: "organization";
-  };
   onSignInAsUser: (userId: string) => void;
 }
 
@@ -48,17 +39,6 @@ const roleBadgeClasses: Record<OrganizationMembershipRole, string> = {
   admin: "bg-severity-high/15 text-severity-high border-severity-high/30",
   editor: "bg-severity-info/15 text-severity-info border-severity-info/30",
   viewer: "bg-secondary text-muted-foreground border-border/50",
-};
-
-const permissionDescriptions: Record<ScenarioWorkspacePermission, string> = {
-  "scenario.view": "Inspect live and historical scenario topology, timeline, and narrative state.",
-  "scenario.share": "Generate share links for stakeholders and replay reviews.",
-  "scenario.export": "Download scenario data and capture replay snapshots for handoff.",
-  "scenario.create": "Create net-new custom scenarios inside the workspace.",
-  "scenario.import": "Bring external scenario JSON into the workspace model.",
-  "scenario.edit": "Modify draft scenarios, including topology layout and draft changes.",
-  "scenario.delete": "Remove custom scenarios and their working revisions from the workspace.",
-  "scenario.publish": "Promote a revision to the live published version used for permalinks.",
 };
 
 function getInitials(name: string) {
@@ -92,10 +72,8 @@ export function WorkspaceAccessDialog({
   organizationName,
   viewer,
   role,
-  authSession,
   permissions,
   availableAccessProfiles,
-  storageStrategy,
   onSignInAsUser,
 }: WorkspaceAccessDialogProps) {
   return (
@@ -104,13 +82,9 @@ export function WorkspaceAccessDialog({
         <div className="border-b border-border/50 bg-gradient-to-br from-blue-500/10 via-background to-cyan-500/10 p-6">
           <DialogHeader className="text-left">
             <DialogTitle>Workspace access</DialogTitle>
-            <DialogDescription>
-              The header menu handles fast identity switching, while this panel
-              carries the full RBAC detail for role reviews and validation.
-            </DialogDescription>
           </DialogHeader>
 
-          <div className="mt-5 flex items-start gap-4">
+          <div className="mt-4 flex items-start gap-4">
             <ProfileAvatar name={viewer.name} className="h-14 w-14" />
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
@@ -137,40 +111,6 @@ export function WorkspaceAccessDialog({
                   {permissions.length} active permissions
                 </span>
               </div>
-              <div className="mt-3 grid gap-2 text-[11px] text-muted-foreground sm:grid-cols-2">
-                <div className="rounded-xl border border-border/50 bg-background/55 px-3 py-2">
-                  <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-muted-foreground/80">
-                    Storage model
-                  </p>
-                  <p className="mt-1 text-foreground">Tenant-isolated local namespace</p>
-                  <p className="mt-1 font-mono text-[10px] text-muted-foreground">
-                    {storageStrategy.kind}
-                  </p>
-                </div>
-                <div className="rounded-xl border border-border/50 bg-background/55 px-3 py-2">
-                  <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-muted-foreground/80">
-                    Active namespace
-                  </p>
-                  <p className="mt-1 break-all font-mono text-[10px] text-muted-foreground">
-                    {storageStrategy.tenantStorageKey}
-                  </p>
-                </div>
-              </div>
-              <div className="mt-2 rounded-xl border border-border/50 bg-background/55 px-3 py-3 text-[11px] text-muted-foreground">
-                <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-muted-foreground/80">
-                  Auth mode
-                </p>
-                <p className="mt-1 text-foreground">
-                  {authSession.method === "oidc"
-                    ? authSession.providerName ?? "Enterprise SSO"
-                    : "Local preview mode"}
-                </p>
-                <p className="mt-1">
-                  {authSession.method === "oidc"
-                    ? `Issuer ${authSession.issuer ?? "unknown"}`
-                    : "Use Enterprise SSO to attach OIDC claims and provider metadata."}
-                </p>
-              </div>
             </div>
           </div>
         </div>
@@ -179,27 +119,18 @@ export function WorkspaceAccessDialog({
           <section>
             <div className="mb-3">
               <h4 className="text-sm font-semibold text-foreground">
-                What this profile can do
+                Permissions
               </h4>
-              <p className="text-xs text-muted-foreground">
-                These grants drive both the visible UI and the repository
-                enforcement underneath it.
-              </p>
             </div>
 
-            <div className="grid gap-2 sm:grid-cols-2">
+            <div className="flex flex-wrap gap-2">
               {permissions.map((permission) => (
-                <div
+                <span
                   key={permission}
-                  className="rounded-xl border border-border/50 bg-secondary/20 p-3"
+                  className="rounded-full border border-border/60 bg-secondary/20 px-3 py-1.5 text-sm text-foreground"
                 >
-                  <p className="text-sm font-medium text-foreground">
-                    {scenarioPermissionLabels[permission]}
-                  </p>
-                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                    {permissionDescriptions[permission]}
-                  </p>
-                </div>
+                  {scenarioPermissionLabels[permission]}
+                </span>
               ))}
             </div>
           </section>
@@ -207,12 +138,8 @@ export function WorkspaceAccessDialog({
           <section>
             <div className="mb-3">
               <h4 className="text-sm font-semibold text-foreground">
-                Available access profiles
+                Preview roles
               </h4>
-              <p className="text-xs text-muted-foreground">
-                Switch identities to test how different roles experience the
-                simulator.
-              </p>
             </div>
 
             <div className="space-y-2">
@@ -265,12 +192,6 @@ export function WorkspaceAccessDialog({
                   </button>
                 );
               })}
-            </div>
-
-            <div className="mt-4 rounded-xl border border-dashed border-border/50 px-3 py-3 text-xs leading-5 text-muted-foreground">
-              Preview mode and enterprise sign-in are separate on purpose. The
-              UI and repository both enforce what this identity can edit,
-              import, delete, publish, share, or export.
             </div>
           </section>
         </div>

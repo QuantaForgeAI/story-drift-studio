@@ -38,6 +38,8 @@ function TopologyMapStory({ scenarioId, time, editable = false }: TopologyMapSto
         edges={scenario.edges}
         nodeStates={snapshot.nodeStates}
         affectedNodes={snapshot.currentEvent?.affectedNodes ?? []}
+        activeEvents={snapshot.activeEvents}
+        currentEvent={snapshot.currentEvent}
         onNodePositionChange={
           editable
             ? (id, x, y) => {

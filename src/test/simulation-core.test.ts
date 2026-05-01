@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Scenario } from "@/data/scenarios";
+import { scenarios, type Scenario } from "@/data/scenarios";
 import { SCENARIO_SCHEMA_VERSION } from "@/lib/scenarioConstants";
 import {
   clampTimelineTime,
@@ -63,6 +63,18 @@ const scenarioFixture: Scenario = {
   },
 };
 
+const newScenarioIds = [
+  "edge-certificate-expiry",
+  "stream-schema-drift",
+  "signing-key-rotation-outage",
+  "feature-flag-runaway",
+  "payment-provider-timeout-spiral",
+  "object-storage-policy-lockout",
+  "scheduler-fanout-storm",
+  "replica-failover-split-brain",
+  "vector-index-poisoning",
+] as const;
+
 describe("simulation core", () => {
   it("clamps timeline time into scenario bounds", () => {
     expect(clampTimelineTime(-5, 120)).toBe(0);
@@ -112,5 +124,23 @@ describe("simulation core", () => {
 
     expect(getNextTimelineTime(55, 3, 120)).toBe(58);
     expect(getNextTimelineTime(118, 5, 120)).toBe(120);
+  });
+
+  it("returns all newly added scenarios to a fully healthy final state", () => {
+    const failures = newScenarioIds.flatMap((scenarioId) => {
+      const scenario = scenarios.find((entry) => entry.id === scenarioId);
+
+      expect(scenario).toBeDefined();
+
+      const snapshot = getTimelineSnapshot(scenario!, scenario!.duration);
+      const nonHealthyNodes = scenario!.nodes
+        .map((node) => ({ id: node.id, status: snapshot.nodeStates.get(node.id) }))
+        .filter((node) => node.status !== "healthy")
+        .map((node) => `${scenarioId}:${node.id}=${node.status}`);
+
+      return nonHealthyNodes;
+    });
+
+    expect(failures).toEqual([]);
   });
 });
