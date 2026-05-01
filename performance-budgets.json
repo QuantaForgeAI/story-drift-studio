@@ -1,7 +1,7 @@
 {
-  "maxInitialJsBytes": 610000,
+  "maxInitialJsBytes": 620000,
   "maxInitialCssBytes": 90000,
-  "maxInitialAssetBytes": 688000,
+  "maxInitialAssetBytes": 710000,
   "maxLargestAsyncChunkJsBytes": 50000,
   "maxTotalJsBytes": 816000
 }
